@@ -7,6 +7,8 @@ use FFMPEG-go library, wrapper around ffmpeg
 
 - Increase/decrease video speed
 - Increase/decrase volume
+- Rotate video
+- Flip video
 - change format(maybe)
 - Trim
 - Extract Audio
