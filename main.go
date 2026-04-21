@@ -37,7 +37,7 @@ func changeSpeedVideoAudio(filePath string, speed float64) error {
 	spedUpVideo := changeVideoSpeed(filePath, speed)
 
 	// vsync flag keeps all orignial frames
-	err := MergeStreamAndOutput(spedUpVideo, spedUpAudio, outputPath, ffmpeg_go.KwArgs{"vsync": 0})
+	err := mergeStreamAndOutput(spedUpVideo, spedUpAudio, outputPath, ffmpeg_go.KwArgs{"vsync": 0})
 	if err != nil {
 		return err
 	}
@@ -60,14 +60,14 @@ func changeVideoVolume(filePath string, multiplier float64) error {
 
 	// copy flag copies over the video when only audio has changed, saving
 	// computational power
-	err := MergeStreamAndOutput(video, amplifiedAudio, outputPath, ffmpeg_go.KwArgs{"c:v": "copy"})
+	err := mergeStreamAndOutput(video, amplifiedAudio, outputPath, ffmpeg_go.KwArgs{"c:v": "copy"})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func MergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwArgs ffmpeg_go.KwArgs) error {
+func mergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwArgs ffmpeg_go.KwArgs) error {
 	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{video, audio}, outputPath, KwArgs).
 		OverWriteOutput().
 		GlobalArgs("-loglevel", "error", "-stats").
@@ -112,7 +112,7 @@ func flipVideo(filePath string, orientation string) error {
 	}
 
 	audio := input.Audio()
-	err := MergeStreamAndOutput(video, audio, outputPath, ffmpeg_go.KwArgs{"c:a": "copy", "c:v": "libx264"})
+	err := mergeStreamAndOutput(video, audio, outputPath, ffmpeg_go.KwArgs{"c:a": "copy", "c:v": "libx264"})
 	if err != nil {
 		return err
 	}
