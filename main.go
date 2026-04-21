@@ -70,33 +70,60 @@ func MergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwA
 
 func convertToAudio(filePath string) error {
 	filePathName, _ := getFileNameAndExt(filePath)
-	outputPath := filePathName + fmt.Sprintf("_X%f", multiplier) + ".mp3"
+	outputPath := filePathName + ".mp3"
 
 	// vn flag removes video output, "c:a" flag copies over the audio
 	err := ffmpeg_go.Input(filePath).Output(outputPath, ffmpeg_go.KwArgs{"vn": nil, "c:a": "copy"}).OverWriteOutput().Run()
 	if err != nil {
 		return fmt.Errorf("convert to audio error: %w", err)
 	}
-	err
+	return nil
+}
+
+// orientation = Vert|Horiz
+func flipVideo(filePath string, orientation string) error {
+	filePathName, filePathExt := getFileNameAndExt(filePath)
+	outputPath := filePathName + filePathExt + fmt.Sprintf("%s_Flipped", orientation)
+
+	switch orientation {
+	case "Vert":
+		err := ffmpeg_go.Input(filePath).VFlip().Output(outputPath, ffmpeg_go.KwArgs{"c": "copy"}).OverWriteOutput().Run()
+		if err != nil {
+			return err
+		}
+	case "Horiz":
+		err := ffmpeg_go.Input(filePath).HFlip().Output(outputPath, ffmpeg_go.KwArgs{"c": "copy"}).OverWriteOutput().Run()
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("wrong orientation")
+	}
+	return nil
 }
 
 func main() {
 	multiplier := 4
 	filePath := "example.mp4"
 
-	videoSpeedErr := changeSpeedVideoAudio(filePath, float64(multiplier))
-	if videoSpeedErr != nil {
-		fmt.Println(videoSpeedErr)
+	err := changeSpeedVideoAudio(filePath, float64(multiplier))
+	if err != nil {
+		fmt.Println(err)
 	}
 
-	videoVolumeErr := changeVideoVolume(filePath, float64(multiplier))
-	if videoVolumeErr != nil {
-		fmt.Println(videoVolumeErr)
+	err = changeVideoVolume(filePath, float64(multiplier))
+	if err != nil {
+		fmt.Println(err)
 	}
 
-	convertToAudioErr := convertToAudio(filePath)
-	if convertToAudioErr != nil {
-		fmt.Println(convertToAudioErr)
+	err = convertToAudio(filePath)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = flipVideo(filePath, "Vert")
+	if err != nil {
+		fmt.Println(err)
 	}
 
 	fmt.Println("Done")
