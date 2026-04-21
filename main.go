@@ -68,9 +68,22 @@ func MergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwA
 	return nil
 }
 
+func convertToAudio(filePath string) error {
+	filePathName, _ := getFileNameAndExt(filePath)
+	outputPath := filePathName + fmt.Sprintf("_X%f", multiplier) + ".mp3"
+
+	// vn flag removes video output, "c:a" flag copies over the audio
+	err := ffmpeg_go.Input(filePath).Output(outputPath, ffmpeg_go.KwArgs{"vn": nil, "c:a": "copy"}).OverWriteOutput().Run()
+	if err != nil {
+		return fmt.Errorf("convert to audio error: %w", err)
+	}
+	err
+}
+
 func main() {
 	multiplier := 4
 	filePath := "example.mp4"
+
 	videoSpeedErr := changeSpeedVideoAudio(filePath, float64(multiplier))
 	if videoSpeedErr != nil {
 		fmt.Println(videoSpeedErr)
@@ -79,6 +92,11 @@ func main() {
 	videoVolumeErr := changeVideoVolume(filePath, float64(multiplier))
 	if videoVolumeErr != nil {
 		fmt.Println(videoVolumeErr)
+	}
+
+	convertToAudioErr := convertToAudio(filePath)
+	if convertToAudioErr != nil {
+		fmt.Println(convertToAudioErr)
 	}
 
 	fmt.Println("Done")
