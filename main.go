@@ -8,6 +8,13 @@ import (
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
+type Orientation int
+
+const (
+	Vertical Orientation = iota
+	Horizontal
+)
+
 func getFileNameAndExt(filePath string) (baseName, extension string) {
 	filePathBase := filepath.Base(filePath)
 	extension = filepath.Ext(filePath)
@@ -16,58 +23,52 @@ func getFileNameAndExt(filePath string) (baseName, extension string) {
 	return baseName, extension
 }
 
-func changeAudioSpeed(filePath string, speed float64) *ffmpeg_go.Stream {
-	return ffmpeg_go.Input(filePath).
+func changeAudioSpeed(input *ffmpeg_go.Stream, speed float64) *ffmpeg_go.Stream {
+	return input.
 		Audio().
 		Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%f", speed)})
 }
 
-func changeVideoSpeed(filePath string, speed float64) *ffmpeg_go.Stream {
+func changeVideoSpeed(input *ffmpeg_go.Stream, speed float64) *ffmpeg_go.Stream {
 	reciprocalSpeed := fmt.Sprintf("%.2f*PTS", 1.0/speed)
-	return ffmpeg_go.Input(filePath).
+	return input.
 		Video().
 		Filter("setpts", ffmpeg_go.Args{reciprocalSpeed})
 }
 
-func changeSpeedVideoAudio(filePath string, speed float64) error {
-	filePathName, filePathExt := getFileNameAndExt(filePath)
-	outputPath := "output/" + filePathName + fmt.Sprintf("_x%d", int(speed)) + filePathExt
-
-	spedUpAudio := changeAudioSpeed(filePath, speed)
-	spedUpVideo := changeVideoSpeed(filePath, speed)
+func changeSpeed(input, output string, speed float64) error {
+	inputStream := ffmpeg_go.Input(input)
+	spedUpAudio := changeAudioSpeed(inputStream, speed)
+	spedUpVideo := changeVideoSpeed(inputStream, speed)
 
 	// vsync flag keeps all orignial frames
-	err := mergeStreamAndOutput(spedUpVideo, spedUpAudio, outputPath, ffmpeg_go.KwArgs{"vsync": 0})
+	err := mergeStream(spedUpVideo, spedUpAudio, output, ffmpeg_go.KwArgs{"vsync": 0})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func changeAudioVolume(filePath string, multiplier float64) *ffmpeg_go.Stream {
+func buildAudioVoumeFilter(filePath string, multiplier float64) *ffmpeg_go.Stream {
 	return ffmpeg_go.Input(filePath).
 		Audio().
 		Filter("volume", ffmpeg_go.Args{fmt.Sprintf("%f", multiplier)})
 }
 
-func changeVideoVolume(filePath string, multiplier float64) error {
-	filePathName, filePathExt := getFileNameAndExt(filePath)
-	outputPath := "output/" + filePathName + fmt.Sprintf("_Volume_x%d", int(multiplier)) + filePathExt
-
-	amplifiedAudio := changeAudioVolume(filePath, multiplier)
-	video := ffmpeg_go.Input(filePath).
-		Video()
+func changeAudioVolume(input, output string, multiplier float64) error {
+	amplifiedAudio := buildAudioVoumeFilter(input, multiplier)
+	video := ffmpeg_go.Input(input).Video()
 
 	// copy flag copies over the video when only audio has changed, saving
 	// computational power
-	err := mergeStreamAndOutput(video, amplifiedAudio, outputPath, ffmpeg_go.KwArgs{"c:v": "copy"})
+	err := mergeStream(video, amplifiedAudio, output, ffmpeg_go.KwArgs{"c:v": "copy"})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func mergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwArgs ffmpeg_go.KwArgs) error {
+func mergeStream(video, audio *ffmpeg_go.Stream, outputPath string, KwArgs ffmpeg_go.KwArgs) error {
 	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{video, audio}, outputPath, KwArgs).
 		OverWriteOutput().
 		GlobalArgs("-loglevel", "error", "-stats").
@@ -112,7 +113,7 @@ func flipVideo(filePath string, orientation string) error {
 	}
 
 	audio := input.Audio()
-	err := mergeStreamAndOutput(video, audio, outputPath, ffmpeg_go.KwArgs{"c:a": "copy", "c:v": "libx264"})
+	err := mergeStream(video, audio, outputPath, ffmpeg_go.KwArgs{"c:a": "copy", "c:v": "libx264"})
 	if err != nil {
 		return err
 	}
@@ -136,35 +137,39 @@ func trimVideo(filePath, sTime, eTime string) error {
 
 func main() {
 	multiplier := 2
-	filePath := "testing.mp4"
+	input := "testing.mp4"
 
-	err := changeSpeedVideoAudio(filePath, float64(multiplier))
+	filePathName, filePathExt := getFileNameAndExt(input)
+
+	output := "output/" + filePathName + fmt.Sprintf("_x%.2f", multiplier) + filePathExt
+	err := changeSpeed(input, output, float64(multiplier))
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	fmt.Println("Video Speed changed")
 
-	err = changeVideoVolume(filePath, float64(multiplier))
+	output = "output/" + filePathName + fmt.Sprintf("_Volume_x%.2f", multiplier) + filePathExt
+	err = changeVideoVolume(input, output, float64(multiplier))
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println("Video Volume changed")
 
-	err = convertToAudio(filePath)
+	err = convertToAudio(input)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println("Video converted to audio")
 
-	err = flipVideo(filePath, "Vert")
+	err = flipVideo(input, "Vert")
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	fmt.Println("Video flipped vertically")
 
-	err = trimVideo(filePath, "00:00:02", "00:00:26")
+	err = trimVideo(input, "00:00:02", "00:00:26")
 	if err != nil {
 		fmt.Println(err)
 	}
