@@ -95,21 +95,39 @@ func convertToAudio(filePath string) error {
 // orientation = Vert|Horiz
 func flipVideo(filePath string, orientation string) error {
 	filePathName, filePathExt := getFileNameAndExt(filePath)
-	outputPath := filePathName + filePathExt + fmt.Sprintf("%s_Flipped", orientation)
+	outputPath := "output/" + filePathName + fmt.Sprintf("_%s_Flipped", orientation) + filePathExt
+
+	input := ffmpeg_go.Input(filePath)
+	var video *ffmpeg_go.Stream
 
 	switch orientation {
 	case "Vert":
-		err := ffmpeg_go.Input(filePath).VFlip().Output(outputPath, ffmpeg_go.KwArgs{"c": "copy"}).OverWriteOutput().Run()
-		if err != nil {
-			return err
-		}
+		video = input.Video().VFlip()
 	case "Horiz":
-		err := ffmpeg_go.Input(filePath).HFlip().Output(outputPath, ffmpeg_go.KwArgs{"c": "copy"}).OverWriteOutput().Run()
-		if err != nil {
-			return err
-		}
+		video = input.Video().HFlip()
 	default:
 		return fmt.Errorf("wrong orientation")
+	}
+
+	audio := input.Audio()
+	err := MergeStreamAndOutput(video, audio, outputPath, ffmpeg_go.KwArgs{"c:a": "copy", "c:v": "libx264"})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func trimVideo(filePath, sTime, eTime string) error {
+	filePathName, filePathExt := getFileNameAndExt(filePath)
+	outputPath := "output/" + filePathName + "_Trimmed_" + filePathExt
+
+	err := ffmpeg_go.Input(filePath, ffmpeg_go.KwArgs{"ss": sTime}).
+		Output(outputPath, ffmpeg_go.KwArgs{"to": eTime, "c:a": "copy", "c:v": "libx264"}).
+		OverWriteOutput().
+		ErrorToStdOut().
+		Run()
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -141,6 +159,15 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	fmt.Println("Video flipped vertically")
+
+	err = trimVideo(filePath, "00:00:02", "00:00:26")
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println("Video trimmed")
 
 	fmt.Println("Done")
 }
