@@ -33,7 +33,7 @@ func changeSpeedVideoAudio(filePath string, speed float64) error {
 	spedUpVideo := changeVideoSpeed(filePath, speed)
 
 	// vsync flag keeps all orignial frames
-	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{spedUpVideo, spedUpAudio}, outputPath, ffmpeg_go.KwArgs{"vsync": 0}).OverWriteOutput().Run()
+	err := MergeStreamAndOutput(spedUpVideo, spedUpAudio, outputPath, ffmpeg_go.KwArgs{"vsync": 0})
 	if err != nil {
 		return err
 	}
@@ -51,10 +51,19 @@ func changeVideoVolume(filePath string, multiplier float64) error {
 	amplifiedAudio := changeAudioVolume(filePath, multiplier)
 	video := ffmpeg_go.Input(filePath).Video()
 
-	// vsync flag keeps all orignial frames
-	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{video, amplifiedAudio}, outputPath, ffmpeg_go.KwArgs{"c:v": "copy"}).OverWriteOutput().Run()
+	// copy flag copies over the video when only audio has changed, saving
+	// computational power
+	err := MergeStreamAndOutput(video, amplifiedAudio, outputPath, ffmpeg_go.KwArgs{"c:v": "copy"})
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func MergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwArgs ffmpeg_go.KwArgs) error {
+	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{video, audio}, outputPath, KwArgs).OverWriteOutput().Run()
+	if err != nil {
+		return fmt.Errorf("output error %w", err)
 	}
 	return nil
 }
