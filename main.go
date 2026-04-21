@@ -70,6 +70,7 @@ func changeVideoVolume(filePath string, multiplier float64) error {
 func MergeStreamAndOutput(video, audio *ffmpeg_go.Stream, outputPath string, KwArgs ffmpeg_go.KwArgs) error {
 	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{video, audio}, outputPath, KwArgs).
 		OverWriteOutput().
+		GlobalArgs("-loglevel", "error", "-stats").
 		Run()
 	if err != nil {
 		return fmt.Errorf("output error %w", err)
@@ -85,6 +86,7 @@ func convertToAudio(filePath string) error {
 	err := ffmpeg_go.Input(filePath).
 		Output(outputPath, ffmpeg_go.KwArgs{"vn": "", "q:a": 2}).
 		OverWriteOutput().
+		GlobalArgs("-loglevel", "error", "-stats").
 		Run()
 	if err != nil {
 		return fmt.Errorf("convert to audio error: %w", err)
@@ -124,7 +126,7 @@ func trimVideo(filePath, sTime, eTime string) error {
 	err := ffmpeg_go.Input(filePath, ffmpeg_go.KwArgs{"ss": sTime}).
 		Output(outputPath, ffmpeg_go.KwArgs{"to": eTime, "c:a": "copy", "c:v": "libx264"}).
 		OverWriteOutput().
-		ErrorToStdOut().
+		GlobalArgs("-loglevel", "error", "-stats").
 		Run()
 	if err != nil {
 		return err
