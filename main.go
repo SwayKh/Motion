@@ -16,12 +16,12 @@ func getFileNameAndExt(filePath string) (baseName, extension string) {
 	return baseName, extension
 }
 
-func increaseVideoSpeed(filePath string, speed int) error {
+func changeSpeedVideoAudio(filePath string, speed float64) error {
 	filePathName, filePathExt := getFileNameAndExt(filePath)
-	outputPath := filePathName + fmt.Sprintf("_X%d", speed) + filePathExt
+	outputPath := filePathName + fmt.Sprintf("_X%f", speed) + filePathExt
 
-	spedUpAudio := speedUpAudio(filePath, speed)
-	spedUpVideo := speedUpVideo(filePath, speed)
+	spedUpAudio := changeAudioSpeed(filePath, speed)
+	spedUpVideo := changeVideoSpeed(filePath, speed)
 
 	// vsync flag keeps all orignial frames
 	err := ffmpeg_go.Output([]*ffmpeg_go.Stream{spedUpVideo, spedUpAudio}, outputPath, ffmpeg_go.KwArgs{"vsync": 0}).OverWriteOutput().Run()
@@ -31,17 +31,17 @@ func increaseVideoSpeed(filePath string, speed int) error {
 	return nil
 }
 
-func speedUpAudio(filePath string, speed int) *ffmpeg_go.Stream {
-	return ffmpeg_go.Input(filePath).Audio().Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%d", speed)})
+func changeAudioSpeed(filePath string, speed float64) *ffmpeg_go.Stream {
+	return ffmpeg_go.Input(filePath).Audio().Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%f", speed)})
 }
 
-func speedUpVideo(filePath string, speed int) *ffmpeg_go.Stream {
-	reciprocalSpeed := fmt.Sprintf("%.2f*PTS", 1.0/float64(speed))
+func changeVideoSpeed(filePath string, speed float64) *ffmpeg_go.Stream {
+	reciprocalSpeed := fmt.Sprintf("%.2f*PTS", 1.0/speed)
 	return ffmpeg_go.Input(filePath).Video().Filter("setpts", ffmpeg_go.Args{reciprocalSpeed})
 }
 
 func main() {
-	err := increaseVideoSpeed("./example.mp4", 4)
+	err := changeSpeedVideoAudio("./example.mp4", 4)
 	if err != nil {
 		fmt.Println(err)
 	}
