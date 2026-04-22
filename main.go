@@ -69,7 +69,10 @@ func (p *Processor) audioSpeed(speed float64) *Processor {
 
 func (p *Processor) videoSpeed(speed float64) *Processor {
 	reciprocalSpeed := fmt.Sprintf("%.2f*PTS", 1.0/speed)
-	p.video = p.video.Filter("setpts", ffmpeg_go.Args{reciprocalSpeed})
+
+	if p.video != nil {
+		p.video = p.video.Filter("setpts", ffmpeg_go.Args{reciprocalSpeed})
+	}
 	p.videoModified = true
 
 	vSyncVal := 0
@@ -78,6 +81,9 @@ func (p *Processor) videoSpeed(speed float64) *Processor {
 }
 
 func (p *Processor) Speed(multiplier float64) *Processor {
+	if multiplier <= 0 {
+		return p
+	}
 	p.audioSpeed(multiplier)
 	p.videoSpeed(multiplier)
 	return p
