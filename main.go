@@ -24,6 +24,13 @@ type Processor struct {
 
 	inputArgs ffmpeg_go.KwArgs
 	kwArgs    ffmpeg_go.KwArgs
+
+	audioModified bool
+	videoModified bool
+
+	disableVideo bool
+	audioQuality *int
+	vsync        *int
 }
 
 func (p *Processor) rebuildInput() {
@@ -35,9 +42,12 @@ func (p *Processor) rebuildInput() {
 
 func NewProcessor(path string) *Processor {
 	p := &Processor{
-		inputPath: path,
-		inputArgs: ffmpeg_go.KwArgs{},
-		kwArgs:    ffmpeg_go.KwArgs{},
+		inputPath:     path,
+		inputArgs:     ffmpeg_go.KwArgs{},
+		kwArgs:        ffmpeg_go.KwArgs{},
+		audioModified: false,
+		videoModified: false,
+		disableVideo:  false,
 	}
 	p.rebuildInput()
 	return p
@@ -51,38 +61,91 @@ func getFileNameAndExt(filePath string) (baseName, extension string) {
 	return baseName, extension
 }
 
-func (p *Processor) changeAudioSpeed(speed float64) *Processor {
+func (p *Processor) audioSpeed(speed float64) *Processor {
 	p.audio = p.audio.Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%f", speed)})
+	p.audioModified = true
 	return p
 }
 
-func (p *Processor) changeVideoSpeed(speed float64) *Processor {
+func (p *Processor) videoSpeed(speed float64) *Processor {
 	reciprocalSpeed := fmt.Sprintf("%.2f*PTS", 1.0/speed)
 	p.video = p.video.Filter("setpts", ffmpeg_go.Args{reciprocalSpeed})
+	p.videoModified = true
 
-	p.kwArgs["vsync"] = 0
+	vSyncVal := 0
+	p.vsync = &vSyncVal
 	return p
 }
 
-func (p *Processor) changeAudioVolume(multiplier float64) *Processor {
+func (p *Processor) Speed(multiplier float64) *Processor {
+	p.audioSpeed(multiplier)
+	p.videoSpeed(multiplier)
+	return p
+}
+
+func (p *Processor) Volume(multiplier float64) *Processor {
 	p.audio = p.audio.Filter("volume", ffmpeg_go.Args{fmt.Sprintf("%f", multiplier)})
+	p.audioModified = true
 
-	// copy flag copies over the video when only audio has changed, saving
-	// computational power
-	p.kwArgs["c:v"] = "copy"
 	return p
 }
 
-func (p *Processor) convertToAudio() *Processor {
+func (p *Processor) ToAudio() *Processor {
 	p.video = nil
-	p.kwArgs["vn"] = ""
-	p.kwArgs["q:a"] = 2
+	p.disableVideo = true
+	q := 2
+	p.audioQuality = &q
+	return p
+}
+
+func (p *Processor) VideoCodec(codec string) *Processor {
+	p.kwArgs["c:v"] = codec
+	return p
+}
+
+func (p *Processor) Flip(orient Orientation) *Processor {
+	switch orient {
+	case Vertical:
+		p.video = p.video.VFlip()
+	case Horizontal:
+		p.video = p.video.HFlip()
+	default:
+		return p
+	}
+	p.videoModified = true
+	return p
+}
+
+// Trim should be called before other transformations
+func (p *Processor) Trim(start, end string) *Processor {
+	p.inputArgs["ss"] = start
+	p.kwArgs["to"] = end
+
+	p.rebuildInput() // important
+
 	return p
 }
 
 func (p *Processor) Output(path string) error {
 	var streams []*ffmpeg_go.Stream
 
+	if p.disableVideo {
+		p.kwArgs["vn"] = ""
+	}
+	if p.audioQuality != nil {
+		p.kwArgs["q:a"] = *p.audioQuality
+	}
+	if p.vsync != nil {
+		p.kwArgs["vsync"] = *p.vsync
+	}
+	// copy flag copies over the video when only audio has changed, saving
+	// computational power
+	if !p.videoModified && p.video != nil {
+		p.kwArgs["c:v"] = "copy"
+	}
+	if !p.audioModified && p.audio != nil {
+		p.kwArgs["c:a"] = "copy"
+	}
 	if p.video != nil {
 		streams = append(streams, p.video)
 	}
@@ -94,32 +157,6 @@ func (p *Processor) Output(path string) error {
 	return cmd.Run()
 }
 
-func (p *Processor) changeOrientation(orient Orientation) *Processor {
-	switch orient {
-	case Vertical:
-		p.video = p.video.VFlip()
-	case Horizontal:
-		p.video = p.video.HFlip()
-	default:
-		return p
-	}
-	p.kwArgs["c:a"] = "copy"
-	p.kwArgs["c:v"] = "libx264"
-	return p
-}
-
-// Trim should be called before other transformations
-func (p *Processor) trimVideo(start, end string) *Processor {
-	p.inputArgs["ss"] = start
-	p.kwArgs["to"] = end
-	p.kwArgs["c:a"] = "copy"
-	p.kwArgs["c:v"] = "libx264"
-
-	p.rebuildInput() // important
-
-	return p
-}
-
 func main() {
 	var multiplier float64 = 2
 	filePath := "testing.mp4"
@@ -127,7 +164,7 @@ func main() {
 	filePathName, filePathExt := getFileNameAndExt(filePath)
 
 	output := "output/" + filePathName + fmt.Sprintf("_x%.2f", multiplier) + filePathExt
-	err := NewProcessor(filePath).changeAudioSpeed(multiplier).changeVideoSpeed(multiplier).Output(output)
+	err := NewProcessor(filePath).Speed(multiplier).Output(output)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -135,21 +172,21 @@ func main() {
 	fmt.Println("Video Speed changed")
 
 	output = "output/" + filePathName + fmt.Sprintf("_Volume_x%.2f", multiplier) + filePathExt
-	err = NewProcessor(filePath).changeAudioVolume(multiplier).Output(output)
+	err = NewProcessor(filePath).Volume(multiplier).Output(output)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println("Video Volume changed")
 
 	output = "output/" + filePathName + ".mp3"
-	err = NewProcessor(filePath).convertToAudio().Output(output)
+	err = NewProcessor(filePath).ToAudio().Output(output)
 	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println("Video converted to audio")
 
 	output = "output/" + filePathName + "_Flipped" + filePathExt
-	err = NewProcessor(filePath).changeOrientation(Vertical).Output(output)
+	err = NewProcessor(filePath).Flip(Vertical).VideoCodec("libx264").Output(output)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -157,7 +194,7 @@ func main() {
 	fmt.Println("Video flipped vertically")
 
 	output = "output/" + filePathName + "_Trimmed_" + filePathExt
-	err = NewProcessor(filePath).trimVideo("00:00:02", "00:00:26").Output(output)
+	err = NewProcessor(filePath).Trim("00:00:02", "00:00:26").VideoCodec("libx264").Output(output)
 	if err != nil {
 		fmt.Println(err)
 	}
