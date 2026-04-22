@@ -27,6 +27,7 @@ type Processor struct {
 
 	audioModified bool
 	videoModified bool
+	needsRebuild  bool
 
 	disableVideo bool
 	audioQuality *int
@@ -38,6 +39,14 @@ func (p *Processor) rebuildInput() {
 	p.input = in
 	p.video = in.Video()
 	p.audio = in.Audio()
+}
+
+// Rebuilds input graph if input arguments were modified (e.g., Trim)
+func (p *Processor) ensureInputReady() {
+	if p.needsRebuild {
+		p.rebuildInput()
+		p.needsRebuild = false
+	}
 }
 
 func NewProcessor(path string) *Processor {
@@ -62,8 +71,10 @@ func getFileNameAndExt(filePath string) (baseName, extension string) {
 }
 
 func (p *Processor) audioSpeed(speed float64) *Processor {
-	p.audio = p.audio.Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%f", speed)})
-	p.audioModified = true
+	if p.audio != nil {
+		p.audio = p.audio.Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%f", speed)})
+		p.audioModified = true
+	}
 	return p
 }
 
@@ -72,31 +83,38 @@ func (p *Processor) videoSpeed(speed float64) *Processor {
 
 	if p.video != nil {
 		p.video = p.video.Filter("setpts", ffmpeg_go.Args{reciprocalSpeed})
+		p.videoModified = true
 	}
-	p.videoModified = true
-
-	vSyncVal := 0
-	p.vsync = &vSyncVal
 	return p
 }
 
 func (p *Processor) Speed(multiplier float64) *Processor {
+	p.ensureInputReady()
 	if multiplier <= 0 {
 		return p
 	}
 	p.audioSpeed(multiplier)
 	p.videoSpeed(multiplier)
+	// optional default
+	if p.vsync == nil {
+		v := 0
+		p.vsync = &v
+	}
 	return p
 }
 
 func (p *Processor) Volume(multiplier float64) *Processor {
-	p.audio = p.audio.Filter("volume", ffmpeg_go.Args{fmt.Sprintf("%f", multiplier)})
-	p.audioModified = true
+	p.ensureInputReady()
+	if p.audio != nil {
+		p.audio = p.audio.Filter("volume", ffmpeg_go.Args{fmt.Sprintf("%f", multiplier)})
+		p.audioModified = true
+	}
 
 	return p
 }
 
 func (p *Processor) ToAudio() *Processor {
+	p.ensureInputReady()
 	p.video = nil
 	p.disableVideo = true
 	q := 2
@@ -109,25 +127,35 @@ func (p *Processor) VideoCodec(codec string) *Processor {
 	return p
 }
 
-func (p *Processor) Flip(orient Orientation) *Processor {
-	switch orient {
-	case Vertical:
-		p.video = p.video.VFlip()
-	case Horizontal:
-		p.video = p.video.HFlip()
-	default:
-		return p
-	}
-	p.videoModified = true
+func (p *Processor) VSync(mode int) *Processor {
+	p.vsync = &mode // ✅ perfectly fine
 	return p
 }
 
-// Trim should be called before other transformations
+func (p *Processor) Flip(orient Orientation) *Processor {
+	p.ensureInputReady()
+	switch orient {
+	case Vertical:
+		if p.video != nil {
+			p.video = p.video.VFlip()
+			p.videoModified = true
+		}
+	case Horizontal:
+		if p.video != nil {
+			p.video = p.video.HFlip()
+			p.videoModified = true
+		}
+	default:
+		return p
+	}
+	return p
+}
+
+// Trim resets the input graph; transformations before it will be discarded
 func (p *Processor) Trim(start, end string) *Processor {
 	p.inputArgs["ss"] = start
 	p.kwArgs["to"] = end
-
-	p.rebuildInput() // important
+	p.needsRebuild = true
 
 	return p
 }
@@ -146,11 +174,16 @@ func (p *Processor) Output(path string) error {
 	}
 	// copy flag copies over the video when only audio has changed, saving
 	// computational power
-	if !p.videoModified && p.video != nil {
-		p.kwArgs["c:v"] = "copy"
+	// This check is the prevent videoCodec from being overwritten
+	if _, ok := p.kwArgs["c:v"]; !ok {
+		if !p.videoModified && p.video != nil {
+			p.kwArgs["c:v"] = "copy"
+		}
 	}
-	if !p.audioModified && p.audio != nil {
-		p.kwArgs["c:a"] = "copy"
+	if _, ok := p.kwArgs["c:a"]; !ok {
+		if !p.audioModified && p.audio != nil {
+			p.kwArgs["c:a"] = "copy"
+		}
 	}
 	if p.video != nil {
 		streams = append(streams, p.video)
@@ -170,7 +203,7 @@ func main() {
 	filePathName, filePathExt := getFileNameAndExt(filePath)
 
 	output := "output/" + filePathName + fmt.Sprintf("_x%.2f", multiplier) + filePathExt
-	err := NewProcessor(filePath).Speed(multiplier).Output(output)
+	err := NewProcessor(filePath).Speed(multiplier).VSync(0).Output(output)
 	if err != nil {
 		fmt.Println(err)
 	}
