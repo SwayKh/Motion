@@ -45,6 +45,14 @@ func NewProcessor(path string) *Processor {
 	return p
 }
 
+func (p *Processor) GetMetadata() (string, error) {
+	jsonOutput, err := ffmpeg_go.Probe(p.inputPath)
+	if err != nil {
+		return "", err
+	}
+	return jsonOutput, nil
+}
+
 func (p *Processor) rebuildInput() {
 	in := ffmpeg_go.Input(p.inputPath, p.inputArgs)
 	p.input = in
