@@ -1,4 +1,4 @@
-package ffmpegutils
+package ffmpeg
 
 import (
 	"fmt"
@@ -32,6 +32,19 @@ type Processor struct {
 	vsync        *int
 }
 
+func NewProcessor(path string) *Processor {
+	p := &Processor{
+		inputPath:     path,
+		inputArgs:     ffmpeg_go.KwArgs{},
+		kwArgs:        ffmpeg_go.KwArgs{},
+		audioModified: false,
+		videoModified: false,
+		disableVideo:  false,
+	}
+	p.rebuildInput()
+	return p
+}
+
 func (p *Processor) rebuildInput() {
 	in := ffmpeg_go.Input(p.inputPath, p.inputArgs)
 	p.input = in
@@ -45,19 +58,6 @@ func (p *Processor) ensureInputReady() {
 		p.rebuildInput()
 		p.needsRebuild = false
 	}
-}
-
-func NewProcessor(path string) *Processor {
-	p := &Processor{
-		inputPath:     path,
-		inputArgs:     ffmpeg_go.KwArgs{},
-		kwArgs:        ffmpeg_go.KwArgs{},
-		audioModified: false,
-		videoModified: false,
-		disableVideo:  false,
-	}
-	p.rebuildInput()
-	return p
 }
 
 func (p *Processor) audioSpeed(speed float64) *Processor {
