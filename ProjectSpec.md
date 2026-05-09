@@ -31,11 +31,13 @@ Add a convert to GIF option
 
 working api
 
-- /upload
-- /video/trim
-- /video/volume
-- ...
-- /getVideo
+- GET /health
+- POST /upload returns videoID
+- GET /video/:id return videoData
+- GET /video/:id/download download the video
+- POST /video/:id/process has array of operation, same as chained processor pipeline
+- GET /job/:id for progress tracking of jobs
+- DELETE /video/:id delete, orignal, output and db video
 
 The ffmpeg worker to handle background task
 Some queue to issue tasks to workers, check new request etc
@@ -96,7 +98,7 @@ Might miake it into an API, with UI
 
 ### Start working on it.
 
-Need a DB, sqlite might work file
+Need a DB, sqlite might work fine
 
 ```
 object video{
