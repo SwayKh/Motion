@@ -3,6 +3,8 @@ package ffmpeg
 import (
 	"fmt"
 
+	"VideoProject/internal/media"
+
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )
 
@@ -30,6 +32,8 @@ type Processor struct {
 	disableVideo bool
 	audioQuality *int
 	vsync        *int
+
+	progress func(float64)
 }
 
 func NewProcessor(path string) *Processor {
@@ -45,14 +49,6 @@ func NewProcessor(path string) *Processor {
 	return p
 }
 
-func (p *Processor) GetMetadata() (string, error) {
-	jsonOutput, err := ffmpeg_go.Probe(p.inputPath)
-	if err != nil {
-		return "", err
-	}
-	return jsonOutput, nil
-}
-
 func (p *Processor) rebuildInput() {
 	in := ffmpeg_go.Input(p.inputPath, p.inputArgs)
 	p.input = in
@@ -66,6 +62,20 @@ func (p *Processor) ensureInputReady() {
 		p.rebuildInput()
 		p.needsRebuild = false
 	}
+}
+
+func (o Orientation) Valid() bool {
+	switch o {
+	case Vertical, Horizontal:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Processor) OnProgress(fn func(float64)) *Processor {
+	p.progress = fn
+	return p
 }
 
 func (p *Processor) audioSpeed(speed float64) *Processor {
@@ -165,32 +175,75 @@ func (p *Processor) Output(path string) error {
 	if p.disableVideo {
 		p.kwArgs["vn"] = ""
 	}
+
 	if p.audioQuality != nil {
 		p.kwArgs["q:a"] = *p.audioQuality
 	}
+
 	if p.vsync != nil {
 		p.kwArgs["vsync"] = *p.vsync
 	}
-	// copy flag copies over the video when only audio has changed, saving
-	// computational power
-	// This check is the prevent videoCodec from being overwritten
+
+	// Copy optimization
 	if _, ok := p.kwArgs["c:v"]; !ok {
 		if !p.videoModified && p.video != nil {
 			p.kwArgs["c:v"] = "copy"
 		}
 	}
+
 	if _, ok := p.kwArgs["c:a"]; !ok {
 		if !p.audioModified && p.audio != nil {
 			p.kwArgs["c:a"] = "copy"
 		}
 	}
+
 	if p.video != nil {
 		streams = append(streams, p.video)
 	}
+
 	if p.audio != nil {
 		streams = append(streams, p.audio)
 	}
 
-	cmd := ffmpeg_go.Output(streams, path, p.kwArgs).OverWriteOutput()
-	return cmd.Run()
+	// Enable ffmpeg progress output
+	p.kwArgs["progress"] = "pipe:1"
+	p.kwArgs["nostats"] = ""
+
+	// The Compile, Start, Wait pipeline is needed to write the progress of
+	// command to the struct, so that it can be polled for progress.
+	cmd := ffmpeg_go.
+		Output(streams, path, p.kwArgs).
+		OverWriteOutput().
+		Compile()
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	// Start process
+	err = cmd.Start()
+	if err != nil {
+		return err
+	}
+
+	// Start progress parser
+	if p.progress != nil {
+
+		// TODO: write a proper error here
+		raw, err := p.GetMetadata()
+		if err != nil {
+			return err
+		}
+		meta, err := media.ExtractMetaData(raw)
+		if err == nil && meta.Duration > 0 {
+			go parseProgress(
+				stdout,
+				meta.Duration,
+				p.progress,
+			)
+		}
+	}
+
+	return cmd.Wait()
 }
