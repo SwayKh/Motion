@@ -2,17 +2,17 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
-	"VideoProject/cmd/worker/ffmpeg"
 	"VideoProject/internal/db"
-	"VideoProject/internal/media"
+	"VideoProject/internal/ffmpeg"
+	"VideoProject/internal/models"
+	"VideoProject/internal/service"
 )
 
 func getFileNameAndExt(filePath string) (baseName, extension string) {
@@ -72,6 +72,9 @@ func processVideo() error {
 }
 
 func UploadHandler(database *sql.DB) http.HandlerFunc {
+	store := db.NewVideoStore(database)
+	videoService := service.NewVideoService(store)
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 150<<20)
 
@@ -86,44 +89,82 @@ func UploadHandler(database *sql.DB) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		defer file.Close()
 
-		originalPath := "./uploads/" + header.Filename
-		dst, err := os.Create(originalPath)
+		video, err := videoService.Upload(file, header)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		json.NewEncoder(w).Encode(video)
+	}
+}
+
+func ProcessHandler(database *sql.DB) http.HandlerFunc {
+	store := db.NewVideoStore(database)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/videos/")
+		id = strings.TrimSuffix(id, "/process")
+
+		video, err := store.Get(id)
+		if err != nil {
+			http.Error(w, "video not found", http.StatusNotFound)
+			return
+		}
+
+		if video.Status != models.StatusUploaded {
+			http.Error(w, "video already processing", http.StatusBadRequest)
+			return
+		}
+
+		var req models.ProcessRequest
+
+		err = json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		err = store.UpdateStatus(id, models.StatusProcessing)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		defer dst.Close()
 
-		io.Copy(dst, file)
+		go service.ProcessVideo(store, video, req)
 
-		raw, _ := ffmpeg.NewProcessor(originalPath).GetMetadata()
-		metaData, _ := media.ExtractMetaData(raw)
-		fmt.Printf("%#v", metaData)
+		w.WriteHeader(http.StatusAccepted)
 
-		video := db.Video{
-			ID:           "123",
-			OriginalPath: originalPath,
-			Status:       "Uploaded",
-		}
-		err = db.CreateVideo(database, video)
+		json.NewEncoder(w).Encode(map[string]any{
+			"id":     id,
+			"status": "processing",
+		})
+	}
+}
+
+func GetVideoHandler(database *sql.DB) http.HandlerFunc {
+	store := db.NewVideoStore(database)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/videos/")
+
+		video, err := store.Get(id)
 		if err != nil {
-			log.Fatal(err)
+			http.Error(w, "video not found", http.StatusNotFound)
+			return
 		}
 
-		output := "dest/" + header.Filename + ".mp3"
-		err = ffmpeg.NewProcessor("./uploads/" + header.Filename).ToAudio().Output(output)
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Println("Video converted to audio, and saved to output")
-		w.Write([]byte("ok"))
+		w.Header().Set("Content-Type", "application/json")
+
+		json.NewEncoder(w).Encode(video)
 	}
 }
 
 func main() {
-	database, err := db.Open("app.db")
+	database, err := db.Open("data/app.db")
 	if err != nil {
 		panic(err)
 	}
@@ -132,6 +173,8 @@ func main() {
 	// fmt.Printf("%#v", vid)
 
 	http.HandleFunc("/upload", UploadHandler(database))
+	http.HandleFunc("/videos/", ProcessHandler(database))
+	http.HandleFunc("/get", GetVideoHandler(database))
 
 	fmt.Printf("Starting server on port 8080...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
