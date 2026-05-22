@@ -94,3 +94,51 @@ func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader)
 	return video, nil
 }
 
+func ProcessVideo(
+	store *db.VideoStore,
+	video *models.Video,
+	req models.ProcessRequest,
+) {
+	outputPath := filepath.Join(
+		"outputs",
+		video.ID+".mp4",
+	)
+
+	processor := ffmpeg.NewProcessor(video.OriginalPath)
+
+	for _, op := range req.Operations {
+		switch op.Type {
+
+		case "trim":
+			processor.Trim(op.Start, op.End)
+
+		case "speed":
+			processor.Speed(op.Factor)
+
+		case "flip":
+			if !op.Direction.Valid() {
+				fmt.Println("invalid flip direction", http.StatusBadRequest)
+				return
+			}
+			processor.Flip(op.Direction)
+		}
+	}
+
+	processor.OnProgress(func(progress float64) {
+		err := store.UpdateProgress(video.ID, progress)
+		if err != nil {
+			fmt.Println(err)
+		}
+	})
+
+	err := processor.Output(outputPath)
+	if err != nil {
+		store.Fail(video.ID, err.Error())
+		return
+	}
+
+	err = store.Complete(video.ID, outputPath)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
