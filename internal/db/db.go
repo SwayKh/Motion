@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 
 	_ "modernc.org/sqlite"
 )
@@ -15,6 +16,7 @@ func Open(path string) (*sql.DB, error) {
 	if err := setup(db); err != nil {
 		return nil, err
 	}
+	fmt.Println("DB PATH:", path)
 
 	return db, nil
 }

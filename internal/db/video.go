@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"VideoProject/internal/models"
@@ -36,7 +37,8 @@ func NewVideoStore(db *sql.DB) *VideoStore {
 }
 
 func (s *VideoStore) Create(video models.Video) error {
-	_, err := s.db.Exec(`
+	fmt.Println("CREATED ID:", video.ID)
+	result, err := s.db.Exec(`
 		INSERT INTO videos (
 			id,
 			original_path,
@@ -57,10 +59,18 @@ func (s *VideoStore) Create(video models.Video) error {
 		video.Height,
 	)
 
+	fmt.Println("CREATE ERR:", err)
+
+	if result != nil {
+		rows, _ := result.RowsAffected()
+		fmt.Println("ROWS:", rows)
+	}
+
 	return err
 }
 
 func (s *VideoStore) Get(id string) (*models.Video, error) {
+	fmt.Println("GET ID:", id)
 	row := s.db.QueryRow(`
 		SELECT
 			id,
@@ -79,16 +89,19 @@ func (s *VideoStore) Get(id string) (*models.Video, error) {
 
 	var v models.Video
 
+	var outputPath sql.NullString
+	var errMsg sql.NullString
+
 	err := row.Scan(
 		&v.ID,
 		&v.OriginalPath,
-		&v.OutputPath,
+		&outputPath,
 		&v.Status,
 		&v.Progress,
 		&v.Duration,
 		&v.Width,
 		&v.Height,
-		&v.Error,
+		&errMsg,
 		&v.CreatedAt,
 	)
 	if err != nil {
