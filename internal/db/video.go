@@ -108,6 +108,10 @@ func (s *VideoStore) Get(id string) (*models.Video, error) {
 		return nil, err
 	}
 
+	// IMPORTANT
+	v.OutputPath = outputPath.String
+	v.Error = errMsg.String
+
 	return &v, nil
 }
 
@@ -138,7 +142,10 @@ func (s *VideoStore) UpdateProgress(id string, progress float64) error {
 }
 
 func (s *VideoStore) Complete(id string, outputPath string) error {
-	_, err := s.db.Exec(`
+	fmt.Println("COMPLETE ID:", id)
+	fmt.Println("COMPLETE OUTPUT:", outputPath)
+
+	result, err := s.db.Exec(`
 		UPDATE videos
 		SET
 			output_path = ?,
@@ -150,6 +157,13 @@ func (s *VideoStore) Complete(id string, outputPath string) error {
 		models.StatusCompleted,
 		id,
 	)
+
+	fmt.Println("COMPLETE ERR:", err)
+
+	if result != nil {
+		rows, _ := result.RowsAffected()
+		fmt.Println("ROWS UPDATED:", rows)
+	}
 
 	return err
 }

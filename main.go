@@ -6,70 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"path/filepath"
-	"strings"
 
 	"VideoProject/internal/db"
-	"VideoProject/internal/ffmpeg"
 	"VideoProject/internal/models"
 	"VideoProject/internal/service"
 )
-
-func getFileNameAndExt(filePath string) (baseName, extension string) {
-	filePathBase := filepath.Base(filePath)
-	extension = filepath.Ext(filePath)
-	baseName = strings.TrimSuffix(filePathBase, extension)
-
-	return baseName, extension
-}
-
-func processVideo() error {
-	var multiplier float64 = 2
-	filePath := "testing.mp4"
-
-	filePathName, filePathExt := getFileNameAndExt(filePath)
-
-	output := "output/" + filePathName + fmt.Sprintf("_x%.2f", multiplier) + filePathExt
-	err := ffmpeg.NewProcessor(filePath).Speed(multiplier).VSync(0).Output(output)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println("Video Speed changed")
-
-	output = "output/" + filePathName + fmt.Sprintf("_Volume_x%.2f", multiplier) + filePathExt
-	err = ffmpeg.NewProcessor(filePath).Volume(multiplier).Output(output)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("Video Volume changed")
-
-	output = "output/" + filePathName + ".mp3"
-	err = ffmpeg.NewProcessor(filePath).ToAudio().Output(output)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("Video converted to audio")
-
-	output = "output/" + filePathName + "_Flipped" + filePathExt
-	err = ffmpeg.NewProcessor(filePath).Flip(ffmpeg.Vertical).VideoCodec("libx264").Output(output)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println("Video flipped vertically")
-
-	output = "output/" + filePathName + "_Trimmed_" + filePathExt
-	err = ffmpeg.NewProcessor(filePath).Trim("00:00:02", "00:00:26").VideoCodec("libx264").Output(output)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	fmt.Println("Video trimmed")
-
-	fmt.Println("Done")
-	return nil
-}
 
 func UploadHandler(database *sql.DB) http.HandlerFunc {
 	store := db.NewVideoStore(database)
@@ -106,8 +47,7 @@ func ProcessHandler(database *sql.DB) http.HandlerFunc {
 	store := db.NewVideoStore(database)
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimPrefix(r.URL.Path, "/videos/")
-		id = strings.TrimSuffix(id, "/process")
+		id := r.PathValue("id")
 
 		video, err := store.Get(id)
 		if err != nil {
@@ -149,11 +89,11 @@ func GetVideoHandler(database *sql.DB) http.HandlerFunc {
 	store := db.NewVideoStore(database)
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := strings.TrimPrefix(r.URL.Path, "/videos/")
+		id := r.PathValue("id")
 
 		video, err := store.Get(id)
 		if err != nil {
-			http.Error(w, "video not found", http.StatusNotFound)
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 
@@ -163,33 +103,43 @@ func GetVideoHandler(database *sql.DB) http.HandlerFunc {
 	}
 }
 
+func DownloadHandler(database *sql.DB) http.HandlerFunc {
+	store := db.NewVideoStore(database)
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+
+		video, err := store.Get(id)
+		if err != nil {
+			http.Error(w, "video not found", http.StatusNotFound)
+			return
+		}
+
+		if video.Status != models.StatusCompleted {
+			http.Error(w, "video not ready", http.StatusBadRequest)
+			return
+		}
+
+		http.ServeFile(w, r, video.OutputPath)
+	}
+}
+
 func main() {
 	database, err := db.Open("data/app.db")
 	if err != nil {
 		panic(err)
 	}
 
-	// vid, _ := db.GetVideo(database, "123")
-	// fmt.Printf("%#v", vid)
+	mux := http.NewServeMux()
 
-	http.HandleFunc("/upload", UploadHandler(database))
-	http.HandleFunc("/videos/", ProcessHandler(database))
-	http.HandleFunc("/get", GetVideoHandler(database))
+	mux.HandleFunc("POST /upload", UploadHandler(database))
+	mux.HandleFunc("GET /videos/{id}", GetVideoHandler(database))
+	mux.HandleFunc("POST /videos/{id}/process", ProcessHandler(database))
+	mux.HandleFunc("GET /videos/{id}/download", DownloadHandler(database))
+	http.ListenAndServe(":8080", mux)
 
 	fmt.Printf("Starting server on port 8080...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
 	}
-
-	// out, err := ffmpeg.NewProcessor("example.mp4").GetMetadata()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	//
-	// meta, err := media.ExtractMetaData(out)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	//
-	// fmt.Printf("%#v\n", meta)
 }
