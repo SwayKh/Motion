@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"VideoProject/internal/db"
+	"VideoProject/internal/job"
 	"VideoProject/internal/models"
 	"VideoProject/internal/service"
 )
@@ -73,7 +74,7 @@ func ProcessHandler(database *sql.DB) http.HandlerFunc {
 		}
 
 		// go service.ProcessVideo(store, video, req)
-		service.Enqueue(service.Job{
+		job.Enqueue(job.Job{
 			VideoID: id,
 			Request: req,
 		})

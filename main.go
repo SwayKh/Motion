@@ -7,7 +7,7 @@ import (
 
 	"VideoProject/internal/api"
 	"VideoProject/internal/db"
-	"VideoProject/internal/service"
+	"VideoProject/internal/job"
 )
 
 func main() {
@@ -16,7 +16,9 @@ func main() {
 		panic(err)
 	}
 	store := db.NewVideoStore(database)
-	service.StartWorkers(3, store)
+
+	job.StartWorkers(3, store)
+	go job.StartCleaner(store)
 
 	mux := http.NewServeMux()
 

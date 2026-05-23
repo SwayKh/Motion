@@ -1,4 +1,4 @@
-package service
+package job
 
 import (
 	"VideoProject/internal/db"
