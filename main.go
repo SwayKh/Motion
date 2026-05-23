@@ -15,6 +15,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	store := db.NewVideoStore(database)
+	service.StartWorkers(3, store)
 
 	mux := http.NewServeMux()
 
