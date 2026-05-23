@@ -8,9 +8,11 @@ import (
 	"VideoProject/internal/api"
 	"VideoProject/internal/db"
 	"VideoProject/internal/job"
+	"VideoProject/internal/logger"
 )
 
 func main() {
+	logger.Init()
 	database, err := db.Open("data/app.db")
 	if err != nil {
 		panic(err)

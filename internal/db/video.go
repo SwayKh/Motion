@@ -59,14 +59,16 @@ func (s *VideoStore) Create(video models.Video) error {
 		video.Height,
 	)
 
-	fmt.Println("CREATE ERR:", err)
-
 	if result != nil {
 		rows, _ := result.RowsAffected()
 		fmt.Println("ROWS:", rows)
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("creating video %s: %w", video.ID, err)
+	}
+
+	return nil
 }
 
 func (s *VideoStore) Get(id string) (*models.Video, error) {
@@ -105,7 +107,11 @@ func (s *VideoStore) Get(id string) (*models.Video, error) {
 		&v.CreatedAt,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(
+			"getting video %s: %w",
+			id,
+			err,
+		)
 	}
 
 	// IMPORTANT
@@ -124,8 +130,11 @@ func (s *VideoStore) UpdateStatus(id string, status string) error {
 		status,
 		id,
 	)
-
-	return err
+	return fmt.Errorf(
+		"updating status for video %s: %w",
+		id,
+		err,
+	)
 }
 
 func (s *VideoStore) UpdateProgress(id string, progress float64) error {
@@ -142,9 +151,6 @@ func (s *VideoStore) UpdateProgress(id string, progress float64) error {
 }
 
 func (s *VideoStore) Complete(id string, outputPath string) error {
-	fmt.Println("COMPLETE ID:", id)
-	fmt.Println("COMPLETE OUTPUT:", outputPath)
-
 	result, err := s.db.Exec(`
 		UPDATE videos
 		SET
@@ -158,14 +164,16 @@ func (s *VideoStore) Complete(id string, outputPath string) error {
 		id,
 	)
 
-	fmt.Println("COMPLETE ERR:", err)
-
 	if result != nil {
 		rows, _ := result.RowsAffected()
 		fmt.Println("ROWS UPDATED:", rows)
 	}
 
-	return err
+	return fmt.Errorf(
+		"completing video %s: %w",
+		id,
+		err,
+	)
 }
 
 func (s *VideoStore) Fail(id string, errMsg string) error {
@@ -181,7 +189,11 @@ func (s *VideoStore) Fail(id string, errMsg string) error {
 		id,
 	)
 
-	return err
+	return fmt.Errorf(
+		"marking video %s failed: %w",
+		id,
+		err,
+	)
 }
 
 func (s *VideoStore) Delete(id string) error {
@@ -190,7 +202,11 @@ func (s *VideoStore) Delete(id string) error {
 		WHERE id = ?
 	`, id)
 
-	return err
+	return fmt.Errorf(
+		"deleting video %s: %w",
+		id,
+		err,
+	)
 }
 
 func (s *VideoStore) ListProcessing() ([]models.Video, error) {

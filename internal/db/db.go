@@ -4,19 +4,21 @@ import (
 	"database/sql"
 	"fmt"
 
+	"VideoProject/internal/logger"
+
 	_ "modernc.org/sqlite"
 )
 
 func Open(path string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("opening db: %w", err)
 	}
 
 	if err := setup(db); err != nil {
 		return nil, err
 	}
-	fmt.Println("DB PATH:", path)
+	logger.Info.Printf("database opened path=%s", path)
 
 	return db, nil
 }
@@ -53,7 +55,7 @@ func setup(db *sql.DB) error {
 
 	for _, q := range queries {
 		if _, err := db.Exec(q); err != nil {
-			return err
+			return fmt.Errorf("setting up db: %w", err)
 		}
 	}
 

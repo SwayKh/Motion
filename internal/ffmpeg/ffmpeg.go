@@ -218,22 +218,21 @@ func (p *Processor) Output(path string) error {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return fmt.Errorf("ffmpeg build command: %w", err)
 	}
 
 	// Start process
 	err = cmd.Start()
 	if err != nil {
-		return err
+		return fmt.Errorf("ffmpeg run command: %w", err)
 	}
 
 	// Start progress parser
 	if p.progress != nil {
 
-		// TODO: write a proper error here
 		raw, err := p.GetMetadata()
 		if err != nil {
-			return err
+			return fmt.Errorf("getting metadata: %w", err)
 		}
 		meta, err := media.ExtractMetaData(raw)
 		if err == nil && meta.Duration > 0 {
