@@ -242,3 +242,70 @@ func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 
 	return videos, nil
 }
+
+func (s *VideoStore) ListExpiredVideos(
+	before time.Time,
+) ([]models.Video, error) {
+	rows, err := s.db.Query(`
+		SELECT
+			id,
+			original_path,
+			output_path,
+			status,
+			progress,
+			duration,
+			width,
+			height,
+			error,
+			created_at
+		FROM videos
+		WHERE
+			created_at < ?
+			AND (
+				status = ?
+				OR status = ?
+			)
+	`,
+		before,
+		models.StatusCompleted,
+		models.StatusFailed,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var videos []models.Video
+
+	for rows.Next() {
+
+		var v models.Video
+
+		var outputPath sql.NullString
+		var errMsg sql.NullString
+
+		err := rows.Scan(
+			&v.ID,
+			&v.OriginalPath,
+			&outputPath,
+			&v.Status,
+			&v.Progress,
+			&v.Duration,
+			&v.Width,
+			&v.Height,
+			&errMsg,
+			&v.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		v.OutputPath = outputPath.String
+		v.Error = errMsg.String
+
+		videos = append(videos, v)
+	}
+
+	return videos, nil
+}
