@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"VideoProject/internal/logger"
 	"VideoProject/internal/models"
 )
 
@@ -37,7 +38,7 @@ func NewVideoStore(db *sql.DB) *VideoStore {
 }
 
 func (s *VideoStore) Create(video models.Video) error {
-	fmt.Println("CREATED ID:", video.ID)
+	logger.Info.Println("CREATED ID:", video.ID)
 	result, err := s.db.Exec(`
 		INSERT INTO videos (
 			id,
@@ -61,7 +62,7 @@ func (s *VideoStore) Create(video models.Video) error {
 
 	if result != nil {
 		rows, _ := result.RowsAffected()
-		fmt.Println("ROWS:", rows)
+		logger.Info.Println("ROWS:", rows)
 	}
 
 	if err != nil {
@@ -72,7 +73,7 @@ func (s *VideoStore) Create(video models.Video) error {
 }
 
 func (s *VideoStore) Get(id string) (*models.Video, error) {
-	fmt.Println("GET ID:", id)
+	logger.Info.Println("GET ID:", id)
 	row := s.db.QueryRow(`
 		SELECT
 			id,
@@ -130,11 +131,10 @@ func (s *VideoStore) UpdateStatus(id string, status string) error {
 		status,
 		id,
 	)
-	return fmt.Errorf(
-		"updating status for video %s: %w",
-		id,
-		err,
-	)
+	if err != nil {
+		return fmt.Errorf("updating status for video %s: %w", id, err)
+	}
+	return nil
 }
 
 func (s *VideoStore) UpdateProgress(id string, progress float64) error {
@@ -146,8 +146,10 @@ func (s *VideoStore) UpdateProgress(id string, progress float64) error {
 		progress,
 		id,
 	)
-
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *VideoStore) Complete(id string, outputPath string) error {
@@ -166,14 +168,13 @@ func (s *VideoStore) Complete(id string, outputPath string) error {
 
 	if result != nil {
 		rows, _ := result.RowsAffected()
-		fmt.Println("ROWS UPDATED:", rows)
+		logger.Info.Println("ROWS UPDATED:", rows)
 	}
 
-	return fmt.Errorf(
-		"completing video %s: %w",
-		id,
-		err,
-	)
+	if err != nil {
+		return fmt.Errorf("completing video %s: %w", id, err)
+	}
+	return nil
 }
 
 func (s *VideoStore) Fail(id string, errMsg string) error {
@@ -188,12 +189,10 @@ func (s *VideoStore) Fail(id string, errMsg string) error {
 		errMsg,
 		id,
 	)
-
-	return fmt.Errorf(
-		"marking video %s failed: %w",
-		id,
-		err,
-	)
+	if err != nil {
+		return fmt.Errorf("marking video %s failed: %w", id, err)
+	}
+	return nil
 }
 
 func (s *VideoStore) Delete(id string) error {
@@ -201,12 +200,10 @@ func (s *VideoStore) Delete(id string) error {
 		DELETE FROM videos
 		WHERE id = ?
 	`, id)
-
-	return fmt.Errorf(
-		"deleting video %s: %w",
-		id,
-		err,
-	)
+	if err != nil {
+		return fmt.Errorf("deleting video %s: %w", id, err)
+	}
+	return nil
 }
 
 func (s *VideoStore) ListProcessing() ([]models.Video, error) {
@@ -236,22 +233,27 @@ func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 
 	for rows.Next() {
 		var v models.Video
+		var outputPath sql.NullString
+		var errMsg sql.NullString
 
 		err := rows.Scan(
 			&v.ID,
 			&v.OriginalPath,
-			&v.OutputPath,
+			&outputPath, // was &v.OutputPath
 			&v.Status,
 			&v.Progress,
 			&v.Duration,
 			&v.Width,
 			&v.Height,
-			&v.Error,
+			&errMsg, // was &v.Error
 			&v.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
+
+		v.OutputPath = outputPath.String
+		v.Error = errMsg.String
 
 		videos = append(videos, v)
 	}
