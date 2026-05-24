@@ -9,6 +9,7 @@ import (
 	"VideoProject/internal/job"
 	"VideoProject/internal/models"
 	"VideoProject/internal/service"
+	"VideoProject/internal/validation"
 )
 
 func UploadHandler(database *sql.DB) http.HandlerFunc {
@@ -70,6 +71,17 @@ func ProcessHandler(database *sql.DB) http.HandlerFunc {
 		err = store.UpdateStatus(id, models.StatusProcessing)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		err = validation.ValidateProcessRequest(video, req)
+		if err != nil {
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusBadRequest,
+			)
+
 			return
 		}
 
