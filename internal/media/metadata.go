@@ -88,8 +88,8 @@ func ExtractMetaData(out string) (*VideoMetadata, error) {
 		}
 	}
 
-	if meta.Width == 0 || meta.Height == 0 {
-		return nil, errors.New("no video stream found")
+	if meta.Width == 0 && !meta.HasAudio {
+		return nil, errors.New("no video or audio stream found")
 	}
 	return meta, nil
 }

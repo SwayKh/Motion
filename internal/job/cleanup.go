@@ -38,7 +38,7 @@ func StartCleaner(store *db.VideoStore) {
 			if video.OutputPath != "" {
 				err := os.Remove(video.OutputPath)
 				if err != nil && !os.IsNotExist(err) {
-					logger.Error.Printf("cleanup delete upload failed video=%s err=%v", video.ID, err)
+					logger.Error.Printf("cleanup delete output failed video=%s err=%v", video.ID, err)
 				}
 			}
 
