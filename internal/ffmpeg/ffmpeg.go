@@ -27,7 +27,6 @@ type Processor struct {
 
 	audioModified bool
 	videoModified bool
-	needsRebuild  bool
 
 	disableVideo bool
 	audioQuality *int
@@ -38,12 +37,10 @@ type Processor struct {
 
 func NewProcessor(path string) *Processor {
 	p := &Processor{
-		inputPath:     path,
-		inputArgs:     ffmpeg_go.KwArgs{},
-		kwArgs:        ffmpeg_go.KwArgs{},
-		audioModified: false,
-		videoModified: false,
-		disableVideo:  false,
+		inputPath:    path,
+		inputArgs:    ffmpeg_go.KwArgs{},
+		kwArgs:       ffmpeg_go.KwArgs{},
+		disableVideo: false,
 	}
 	p.rebuildInput()
 	return p
@@ -54,14 +51,6 @@ func (p *Processor) rebuildInput() {
 	p.input = in
 	p.video = in.Video()
 	p.audio = in.Audio()
-}
-
-// Rebuilds input graph if input arguments were modified (e.g., Trim)
-func (p *Processor) ensureInputReady() {
-	if p.needsRebuild {
-		p.rebuildInput()
-		p.needsRebuild = false
-	}
 }
 
 func (o Orientation) Valid() bool {
@@ -97,7 +86,6 @@ func (p *Processor) videoSpeed(speed float64) *Processor {
 }
 
 func (p *Processor) Speed(multiplier float64) *Processor {
-	p.ensureInputReady()
 	if multiplier <= 0 {
 		return p
 	}
@@ -112,7 +100,6 @@ func (p *Processor) Speed(multiplier float64) *Processor {
 }
 
 func (p *Processor) Volume(multiplier float64) *Processor {
-	p.ensureInputReady()
 	if p.audio != nil {
 		p.audio = p.audio.Filter("volume", ffmpeg_go.Args{fmt.Sprintf("%f", multiplier)})
 		p.audioModified = true
@@ -122,7 +109,6 @@ func (p *Processor) Volume(multiplier float64) *Processor {
 }
 
 func (p *Processor) ToAudio() *Processor {
-	p.ensureInputReady()
 	p.video = nil
 	p.disableVideo = true
 	q := 2
@@ -142,7 +128,6 @@ func (p *Processor) VSync(mode int) *Processor {
 }
 
 func (p *Processor) Flip(orient Orientation) *Processor {
-	p.ensureInputReady()
 	switch orient {
 	case Vertical:
 		if p.video != nil {
@@ -161,11 +146,20 @@ func (p *Processor) Flip(orient Orientation) *Processor {
 }
 
 // Trim resets the input graph; transformations before it will be discarded
+// Should be fixed now
 func (p *Processor) Trim(start, end string) *Processor {
-	p.inputArgs["ss"] = start
-	p.kwArgs["to"] = end
-	p.needsRebuild = true
-
+	if p.video != nil {
+		p.video = p.video.
+			Filter("trim", ffmpeg_go.Args{fmt.Sprintf("start=%s:end=%s", start, end)}).
+			Filter("setpts", ffmpeg_go.Args{"PTS-STARTPTS"})
+		p.videoModified = true
+	}
+	if p.audio != nil {
+		p.audio = p.audio.
+			Filter("atrim", ffmpeg_go.Args{fmt.Sprintf("start=%s:end=%s", start, end)}).
+			Filter("asetpts", ffmpeg_go.Args{"PTS-STARTPTS"})
+		p.audioModified = true
+	}
 	return p
 }
 
