@@ -11,7 +11,7 @@ import (
 const (
 	MaxOperations = 10
 	MinSpeed      = 0.25
-	MaxSpeed      = 4.0
+	MaxSpeed      = 2.0
 )
 
 func ValidateProcessRequest(video *models.Video, req models.ProcessRequest) error {
@@ -59,6 +59,25 @@ func ValidateProcessRequest(video *models.Video, req models.ProcessRequest) erro
 				)
 			}
 
+		case "volume":
+			err := validateVolume(op)
+			if err != nil {
+				return fmt.Errorf(
+					"operation %d volume invalid: %w",
+					i,
+					err,
+				)
+			}
+		case "to_audio":
+			err := validateToAudio(op)
+			if err != nil {
+				return fmt.Errorf(
+					"operation %d to_audio invalid: %w",
+					i,
+					err,
+				)
+			}
+
 		default:
 			return fmt.Errorf(
 				"operation %d unknown type=%s",
@@ -91,6 +110,20 @@ func validateSpeed(op models.Operation) error {
 			"speed factor must be between %.2f and %.2f",
 			MinSpeed,
 			MaxSpeed,
+		)
+	}
+
+	return nil
+}
+
+func validateToAudio(op models.Operation) error {
+	return nil
+}
+
+func validateVolume(op models.Operation) error {
+	if op.Factor <= 0 {
+		return fmt.Errorf(
+			"volume factor must be greater than 0",
 		)
 	}
 
