@@ -18,6 +18,8 @@ type Video struct {
 	Status   string
 	Progress float64
 
+	Operations string
+
 	Duration float64
 	Width    int
 	Height   int
@@ -38,8 +40,7 @@ func NewVideoStore(db *sql.DB) *VideoStore {
 }
 
 func (s *VideoStore) Create(video models.Video) error {
-	logger.Info.Println("CREATED ID:", video.ID)
-	result, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 		INSERT INTO videos (
 			id,
 			original_path,
@@ -59,12 +60,6 @@ func (s *VideoStore) Create(video models.Video) error {
 		video.Width,
 		video.Height,
 	)
-
-	if result != nil {
-		rows, _ := result.RowsAffected()
-		logger.Info.Println("ROWS:", rows)
-	}
-
 	if err != nil {
 		return fmt.Errorf("creating video %s: %w", video.ID, err)
 	}
@@ -81,6 +76,7 @@ func (s *VideoStore) Get(id string) (*models.Video, error) {
 			output_path,
 			status,
 			progress,
+            operations,
 			duration,
 			width,
 			height,
@@ -101,6 +97,7 @@ func (s *VideoStore) Get(id string) (*models.Video, error) {
 		&outputPath,
 		&v.Status,
 		&v.Progress,
+		&v.Operations,
 		&v.Duration,
 		&v.Width,
 		&v.Height,
@@ -153,7 +150,7 @@ func (s *VideoStore) UpdateProgress(id string, progress float64) error {
 }
 
 func (s *VideoStore) Complete(id string, outputPath string) error {
-	result, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 		UPDATE videos
 		SET
 			output_path = ?,
@@ -165,12 +162,6 @@ func (s *VideoStore) Complete(id string, outputPath string) error {
 		models.StatusCompleted,
 		id,
 	)
-
-	if result != nil {
-		rows, _ := result.RowsAffected()
-		logger.Info.Println("ROWS UPDATED:", rows)
-	}
-
 	if err != nil {
 		return fmt.Errorf("completing video %s: %w", id, err)
 	}
@@ -214,6 +205,7 @@ func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 			output_path,
 			status,
 			progress,
+            operations,
 			duration,
 			width,
 			height,
@@ -242,6 +234,7 @@ func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 			&outputPath, // was &v.OutputPath
 			&v.Status,
 			&v.Progress,
+			&v.Operations,
 			&v.Duration,
 			&v.Width,
 			&v.Height,
@@ -261,9 +254,7 @@ func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 	return videos, nil
 }
 
-func (s *VideoStore) ListExpiredVideos(
-	before time.Time,
-) ([]models.Video, error) {
+func (s *VideoStore) ListExpiredVideos(before time.Time) ([]models.Video, error) {
 	rows, err := s.db.Query(`
 		SELECT
 			id,
@@ -271,6 +262,7 @@ func (s *VideoStore) ListExpiredVideos(
 			output_path,
 			status,
 			progress,
+            operations,
 			duration,
 			width,
 			height,
@@ -309,10 +301,82 @@ func (s *VideoStore) ListExpiredVideos(
 			&outputPath,
 			&v.Status,
 			&v.Progress,
+			&v.Operations,
 			&v.Duration,
 			&v.Width,
 			&v.Height,
 			&errMsg,
+			&v.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		v.OutputPath = outputPath.String
+		v.Error = errMsg.String
+
+		videos = append(videos, v)
+	}
+
+	return videos, nil
+}
+
+func (s *VideoStore) Queue(id string, operations string) error {
+	_, err := s.db.Exec(`
+        UPDATE videos
+        SET
+            status = ?,
+            operations = ?
+        WHERE id = ?
+    `,
+		models.StatusQueued,
+		operations,
+		id,
+	)
+
+	return err
+}
+
+func (s *VideoStore) ListQueued() ([]models.Video, error) {
+	rows, err := s.db.Query(`
+        SELECT
+            id,
+            original_path,
+            output_path,
+            status,
+            progress,
+            operations,
+            duration,
+            width,
+            height,
+            error,
+            created_at
+        FROM videos
+        WHERE status = ?
+    `, models.StatusQueued)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var videos []models.Video
+
+	for rows.Next() {
+		var v models.Video
+		var outputPath sql.NullString
+		var errMsg sql.NullString
+
+		err := rows.Scan(
+			&v.ID,
+			&v.OriginalPath,
+			&outputPath, // was &v.OutputPath
+			&v.Status,
+			&v.Progress,
+			&v.Operations,
+			&v.Duration,
+			&v.Width,
+			&v.Height,
+			&errMsg, // was &v.Error
 			&v.CreatedAt,
 		)
 		if err != nil {

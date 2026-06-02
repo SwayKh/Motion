@@ -30,6 +30,16 @@ func main() {
 		}
 	}
 
+	// Recovered queued requests
+	queued, err := store.ListQueued()
+	if err != nil {
+		logger.Error.Printf("failed loading queued jobs: %v", err)
+	} else {
+		for _, v := range queued {
+			job.Enqueue(job.Job{VideoID: v.ID})
+		}
+	}
+
 	// At most 3 workers at a time.
 	job.StartWorkers(3, store)
 	// Cleanup every hour

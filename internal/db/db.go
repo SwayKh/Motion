@@ -37,6 +37,8 @@ func setup(db *sql.DB) error {
             status TEXT NOT NULL,
             progress REAL DEFAULT 0,
 
+            operations TEXT,
+
             duration REAL,
             width INTEGER,
             height INTEGER,

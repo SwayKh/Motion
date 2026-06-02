@@ -8,6 +8,7 @@ import (
 
 const (
 	StatusUploaded   = "uploaded"
+	StatusQueued     = "queued"
 	StatusProcessing = "processing"
 	StatusCompleted  = "completed"
 	StatusFailed     = "failed"
@@ -21,6 +22,8 @@ type Video struct {
 
 	Status   string
 	Progress float64
+
+	Operations string
 
 	Duration float64
 	Width    int

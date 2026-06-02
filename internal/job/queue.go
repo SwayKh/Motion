@@ -1,20 +1,24 @@
 package job
 
 import (
+	"fmt"
+
 	"VideoProject/internal/db"
-	"VideoProject/internal/models"
 )
 
 type Job struct {
 	VideoID string
-
-	Request models.ProcessRequest
 }
 
 var Queue = make(chan Job, 100)
 
-func Enqueue(job Job) {
-	Queue <- job
+func Enqueue(job Job) error {
+	select {
+	case Queue <- job:
+		return nil
+	default:
+		return fmt.Errorf("job queue is full")
+	}
 }
 
 func StartWorkers(

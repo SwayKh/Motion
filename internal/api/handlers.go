@@ -68,28 +68,31 @@ func ProcessHandler(database *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		err = store.UpdateStatus(id, models.StatusProcessing)
+		err = validation.ValidateProcessRequest(video, req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		opsJSON, err := json.Marshal(req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		err = validation.ValidateProcessRequest(video, req)
+		err = store.Queue(id, string(opsJSON))
 		if err != nil {
-			http.Error(
-				w,
-				err.Error(),
-				http.StatusBadRequest,
-			)
-
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		// go service.ProcessVideo(store, video, req)
-		job.Enqueue(job.Job{
-			VideoID: id,
-			Request: req,
-		})
+		err = job.Enqueue(job.Job{VideoID: id})
+		if err != nil {
+			// Revert the queued status since we couldn't actually enqueue
+			store.UpdateStatus(id, models.StatusUploaded)
+			http.Error(w, "server is busy, try again later", http.StatusServiceUnavailable)
+			return
+		}
 
 		w.WriteHeader(http.StatusAccepted)
 
