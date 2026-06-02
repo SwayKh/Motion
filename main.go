@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"VideoProject/internal/api"
 	"VideoProject/internal/db"
@@ -12,6 +13,15 @@ import (
 
 func main() {
 	logger.Init()
+
+	err := ensureDirectories()
+	if err != nil {
+		log.Fatalf(
+			"failed creating directories: %v",
+			err,
+		)
+	}
+
 	database, err := db.Open("data/app.db")
 	if err != nil {
 		panic(err)
@@ -62,4 +72,20 @@ func main() {
 	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func ensureDirectories() error {
+	dirs := []string{
+		"uploads",
+		"outputs",
+	}
+
+	for _, dir := range dirs {
+		err := os.MkdirAll(dir, 0o755)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
