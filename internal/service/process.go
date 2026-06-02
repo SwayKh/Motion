@@ -61,28 +61,26 @@ func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader)
 	}
 
 	// Probe metadata
-
+	// After os.Create / dst.ReadFrom succeeds, any early return should clean up:
 	raw, err := ffmpeg.NewProcessor(uploadPath).GetMetadata()
 	if err != nil {
-		return nil, fmt.Errorf(
-			"probing video metadata: %w",
-			err,
-		)
-	}
-	meta, err := media.ExtractMetaData(raw)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"extracting metadata: %w",
-			err,
-		)
+		os.Remove(uploadPath)
+		return nil, fmt.Errorf("probing video metadata: %w", err)
 	}
 
-	// Validation
+	meta, err := media.ExtractMetaData(raw)
+	if err != nil {
+		os.Remove(uploadPath)
+		return nil, fmt.Errorf("extracting metadata: %w", err)
+	}
+
 	if meta.Duration > 300 {
+		os.Remove(uploadPath)
 		return nil, fmt.Errorf("video exceeds 5 minute limit")
 	}
 
-	if meta.Width > 1920 || meta.Height > 1080 {
+	if meta.Width > 0 && (meta.Width > 1920 || meta.Height > 1080) {
+		os.Remove(uploadPath)
 		return nil, fmt.Errorf("video exceeds 1080p limit")
 	}
 
@@ -118,29 +116,57 @@ func ProcessVideo(
 	req models.ProcessRequest,
 ) {
 	logger.Info.Printf("video=%s started processing", video.ID)
-	outputPath := filepath.Join(
-		"outputs",
-		video.ID+".mp4",
-	)
+	// Determine output extension
+	outputExt := ".mp4"
+	for _, op := range req.Operations {
+		if op.Type == "to_audio" {
+			outputExt = ".mp3"
+			break
+		}
+	}
+
+	outputPath := filepath.Join("outputs", video.ID+outputExt)
 
 	processor := ffmpeg.NewProcessor(video.OriginalPath)
 
+	applied := 0
 	for _, op := range req.Operations {
 		switch op.Type {
-
 		case "trim":
 			processor.Trim(op.Start, op.End)
-
+			applied++
 		case "speed":
+			if op.Factor <= 0 {
+				store.Fail(video.ID, "speed factor must be greater than 0")
+				return
+			}
 			processor.Speed(op.Factor)
-
+			applied++
+		case "volume":
+			if op.Factor < 0 {
+				store.Fail(video.ID, "volume factor cannot be negative")
+				return
+			}
+			processor.Volume(op.Factor)
+			applied++
 		case "flip":
 			if !op.Direction.Valid() {
-				logger.Error.Printf("video=%s invalid flip direction=%d", video.ID, op.Direction)
+				store.Fail(video.ID, fmt.Sprintf("invalid flip direction: %d", op.Direction))
 				return
 			}
 			processor.Flip(op.Direction)
+			applied++
+		case "to_audio":
+			processor.ToAudio()
+			applied++
+		default:
+			logger.Error.Printf("video=%s unknown operation type=%s", video.ID, op.Type)
 		}
+	}
+
+	if applied == 0 {
+		store.Fail(video.ID, "no valid operations provided")
+		return
 	}
 
 	processor.OnProgress(func(progress float64) {
