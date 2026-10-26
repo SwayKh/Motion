@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"VideoProject/internal/media"
@@ -32,6 +33,7 @@ type Processor struct {
 	videoModified bool
 
 	disableVideo bool
+	hasAudio     bool
 	audioQuality *int
 	fpsMode      *string
 
@@ -39,11 +41,16 @@ type Processor struct {
 }
 
 func NewProcessor(path string) *Processor {
+	return NewProcessorWithAudio(path, true)
+}
+
+func NewProcessorWithAudio(path string, hasAudio bool) *Processor {
 	p := &Processor{
 		inputPath:    path,
 		inputArgs:    ffmpeg_go.KwArgs{},
 		kwArgs:       ffmpeg_go.KwArgs{},
 		disableVideo: false,
+		hasAudio:     hasAudio,
 	}
 	p.rebuildInput()
 	return p
@@ -53,7 +60,11 @@ func (p *Processor) rebuildInput() {
 	in := ffmpeg_go.Input(p.inputPath, p.inputArgs)
 	p.input = in
 	p.video = in.Video()
-	p.audio = in.Audio()
+	if p.hasAudio {
+		p.audio = in.Audio()
+	} else {
+		p.audio = nil
+	}
 }
 
 func (o Orientation) Valid() bool {
@@ -72,7 +83,7 @@ func (p *Processor) OnProgress(fn func(float64)) *Processor {
 
 func (p *Processor) audioSpeed(speed float64) *Processor {
 	if p.audio != nil {
-		p.audio = p.audio.Filter("atempo", ffmpeg_go.Args{fmt.Sprintf("%f", speed)})
+		p.audio = p.audio.Filter("atempo", ffmpeg_go.Args{strconv.FormatFloat(speed, 'g', -1, 64)})
 		p.audioModified = true
 	}
 	return p
@@ -105,7 +116,7 @@ func (p *Processor) Speed(multiplier float64) *Processor {
 
 func (p *Processor) Volume(multiplier float64) *Processor {
 	if p.audio != nil {
-		p.audio = p.audio.Filter("volume", ffmpeg_go.Args{fmt.Sprintf("%f", multiplier)})
+		p.audio = p.audio.Filter("volume", ffmpeg_go.Args{strconv.FormatFloat(multiplier, 'g', -1, 64)})
 		p.audioModified = true
 	}
 
