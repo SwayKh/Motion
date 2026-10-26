@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -299,6 +300,42 @@ func generateTestVideoWithoutAudio(t *testing.T, path string) {
 	}
 }
 
+func probeStreamTypes(t *testing.T, path string) []string {
+	t.Helper()
+
+	command := exec.Command(
+		"ffprobe",
+		"-v", "error",
+		"-show_entries", "stream=codec_type",
+		"-of", "csv=p=0",
+		path,
+	)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("probe output streams: %v\n%s", err, output)
+	}
+
+	types := strings.Fields(string(output))
+	slices.Sort(types)
+	return types
+}
+
+func assertPlayable(t *testing.T, path string) {
+	t.Helper()
+
+	command := exec.Command(
+		"ffmpeg",
+		"-hide_banner",
+		"-loglevel", "error",
+		"-i", path,
+		"-f", "null",
+		"-",
+	)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("decode output media: %v\n%s", err, output)
+	}
+}
+
 func TestHealthAndListVideos(t *testing.T) {
 	env := newTestEnv(t)
 
@@ -433,18 +470,26 @@ func TestUploadValidInvalidAndServeOriginal(t *testing.T) {
 		t.Fatalf("invalid upload status = %d, body=%s", response.StatusCode, body)
 	}
 	errorPayload := decodeJSON[map[string]string](t, body)
-	if errorPayload["error"] == "" {
-		t.Fatalf("invalid upload was missing error payload: %s", body)
+	if !strings.Contains(errorPayload["error"], "unsupported or corrupt") {
+		t.Fatalf("invalid upload error is not useful: %q", errorPayload["error"])
 	}
 
 	response, body = postMultipart(t, env.url("/upload"), "video", "notes.txt", []byte("hello"))
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unsupported extension status = %d, body=%s", response.StatusCode, body)
 	}
+	errorPayload = decodeJSON[map[string]string](t, body)
+	if !strings.Contains(errorPayload["error"], "unsupported file type .txt") {
+		t.Fatalf("unsupported extension error is not useful: %q", errorPayload["error"])
+	}
 
 	response, body = postMultipart(t, env.url("/upload"), "file", "wrong-field.mp4", source)
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("wrong field status = %d, body=%s", response.StatusCode, body)
+	}
+	errorPayload = decodeJSON[map[string]string](t, body)
+	if !strings.Contains(errorPayload["error"], "missing or invalid") {
+		t.Fatalf("wrong field error is not useful: %q", errorPayload["error"])
 	}
 
 	_, listBody := doRequest(t, http.MethodGet, env.url("/videos"), "", "")
@@ -454,6 +499,95 @@ func TestUploadValidInvalidAndServeOriginal(t *testing.T) {
 	}
 	if len(list) != 1 {
 		t.Fatalf("invalid uploads created rows; list length = %d", len(list))
+	}
+}
+
+func TestUploadInternalFailuresReturnServerErrors(t *testing.T) {
+	requireVideoTools(t)
+
+	sourcePath := filepath.Join(t.TempDir(), "source.mp4")
+	generateTestVideo(t, sourcePath)
+	source, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		prepare func(t *testing.T, env *testEnv)
+	}{
+		{
+			name: "storage failure",
+			prepare: func(t *testing.T, env *testEnv) {
+				t.Helper()
+				if err := os.RemoveAll("uploads"); err != nil {
+					t.Fatalf("remove uploads dir: %v", err)
+				}
+				if err := os.WriteFile("uploads", []byte("not a directory"), 0o600); err != nil {
+					t.Fatalf("replace uploads dir: %v", err)
+				}
+			},
+		},
+		{
+			name: "database failure",
+			prepare: func(t *testing.T, env *testEnv) {
+				t.Helper()
+				if _, err := env.db.Exec(`
+					CREATE TRIGGER fail_upload
+					BEFORE INSERT ON videos
+					BEGIN
+						SELECT RAISE(ABORT, 'injected database failure');
+					END
+				`); err != nil {
+					t.Fatalf("create database failure trigger: %v", err)
+				}
+			},
+		},
+		{
+			name: "probing infrastructure failure",
+			prepare: func(t *testing.T, env *testEnv) {
+				t.Helper()
+				t.Setenv("PATH", "")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			test.prepare(t, env)
+
+			response, body := postMultipart(t, env.url("/upload"), "video", "source.mp4", source)
+			if response.StatusCode != http.StatusInternalServerError {
+				t.Fatalf("upload status = %d, want 500, body=%s", response.StatusCode, body)
+			}
+
+			payload := decodeJSON[map[string]string](t, body)
+			if payload["error"] != "failed to process upload" {
+				t.Fatalf("upload error = %q", payload["error"])
+			}
+			for _, forbidden := range []string{
+				env.dir,
+				"uploads",
+				"ffprobe",
+				"injected",
+				"not a directory",
+			} {
+				if strings.Contains(strings.ToLower(string(body)), strings.ToLower(forbidden)) {
+					t.Fatalf("upload response exposed %q: %s", forbidden, body)
+				}
+			}
+
+			if test.name != "storage failure" {
+				files, err := filepath.Glob(filepath.Join("uploads", "*"))
+				if err != nil {
+					t.Fatalf("list upload files: %v", err)
+				}
+				if len(files) != 0 {
+					t.Fatalf("failed upload left files behind: %v", files)
+				}
+			}
+		})
 	}
 }
 
@@ -798,6 +932,191 @@ func TestValidationErrorsIncludeOperationIndex(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(payload["error"]), env.dir) {
 		t.Fatalf("error exposed temp path: %q", payload["error"])
+	}
+}
+
+func TestProcessingOperationsRespectAudioAvailability(t *testing.T) {
+	requireVideoTools(t)
+	env := newTestEnv(t)
+
+	audioPath := filepath.Join(t.TempDir(), "with-audio.mp4")
+	generateTestVideo(t, audioPath)
+	audioSource, err := os.ReadFile(audioPath)
+	if err != nil {
+		t.Fatalf("read audio source: %v", err)
+	}
+
+	silentPath := filepath.Join(t.TempDir(), "without-audio.mp4")
+	generateTestVideoWithoutAudio(t, silentPath)
+	silentSource, err := os.ReadFile(silentPath)
+	if err != nil {
+		t.Fatalf("read silent source: %v", err)
+	}
+
+	upload := func(name string, source []byte) string {
+		t.Helper()
+		response, body := postMultipart(t, env.url("/upload"), "video", name, source)
+		if response.StatusCode != http.StatusCreated {
+			t.Fatalf("upload %s status = %d, body=%s", name, response.StatusCode, body)
+		}
+		payload := decodeJSON[map[string]any](t, body)
+		id, _ := payload["id"].(string)
+		if id == "" {
+			t.Fatalf("upload %s returned no id: %s", name, body)
+		}
+		return id
+	}
+
+	audioID := upload("with-audio.mp4", audioSource)
+	silentID := upload("without-audio.mp4", silentSource)
+
+	env.startManager(t)
+
+	trim := []models.Operation{{Type: "trim", Start: "00:00:00", End: "00:00:01.200"}}
+	speed := []models.Operation{{Type: "speed", Factor: 1.25}}
+	flip := []models.Operation{{Type: "flip", Direction: ffmpeg.Horizontal}}
+	volume := []models.Operation{{Type: "volume", Factor: 0.5}}
+	extract := []models.Operation{{Type: "to_audio"}}
+
+	tests := []struct {
+		name        string
+		videoID     string
+		operations  []models.Operation
+		wantStatus  string
+		wantStreams []string
+		wantError   string
+	}{
+		{
+			name:        "audio trim",
+			videoID:     audioID,
+			operations:  trim,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"audio", "video"},
+		},
+		{
+			name:        "audio speed",
+			videoID:     audioID,
+			operations:  speed,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"audio", "video"},
+		},
+		{
+			name:        "audio flip",
+			videoID:     audioID,
+			operations:  flip,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"audio", "video"},
+		},
+		{
+			name:        "audio volume",
+			videoID:     audioID,
+			operations:  volume,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"audio", "video"},
+		},
+		{
+			name:        "audio extraction",
+			videoID:     audioID,
+			operations:  extract,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"audio"},
+		},
+		{
+			name:        "silent trim",
+			videoID:     silentID,
+			operations:  trim,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"video"},
+		},
+		{
+			name:        "silent speed",
+			videoID:     silentID,
+			operations:  speed,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"video"},
+		},
+		{
+			name:        "silent flip",
+			videoID:     silentID,
+			operations:  flip,
+			wantStatus:  models.StatusCompleted,
+			wantStreams: []string{"video"},
+		},
+		{
+			name:       "silent volume",
+			videoID:    silentID,
+			operations: volume,
+			wantStatus: models.StatusFailed,
+			wantError:  "no audio track to adjust",
+		},
+		{
+			name:       "silent extraction",
+			videoID:    silentID,
+			operations: extract,
+			wantStatus: models.StatusFailed,
+			wantError:  "no audio track to extract",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			requestBody, err := json.Marshal(models.ProcessRequest{Operations: test.operations})
+			if err != nil {
+				t.Fatalf("marshal operations: %v", err)
+			}
+
+			response, body := doRequest(
+				t,
+				http.MethodPost,
+				env.url("/videos/"+test.videoID+"/process"),
+				string(requestBody),
+				"application/json",
+			)
+			if response.StatusCode != http.StatusAccepted {
+				t.Fatalf("process status = %d, body=%s", response.StatusCode, body)
+			}
+			created := decodeJSON[map[string]any](t, body)
+			jobID, _ := created["id"].(string)
+			if jobID == "" {
+				t.Fatalf("process returned no job id: %s", body)
+			}
+
+			finalJob := env.waitForJob(t, jobID)
+			if finalJob["status"] != test.wantStatus {
+				t.Fatalf("job status = %v, want %s (body=%v)", finalJob["status"], test.wantStatus, finalJob)
+			}
+
+			if test.wantStatus == models.StatusFailed {
+				errorMessage, _ := finalJob["error"].(string)
+				if !strings.Contains(errorMessage, test.wantError) {
+					t.Fatalf("job error = %q, want %q", errorMessage, test.wantError)
+				}
+				return
+			}
+
+			response, output := doRequest(t, http.MethodGet, env.url("/videos/"+test.videoID+"/output"), "", "")
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("output status = %d, body=%s", response.StatusCode, output)
+			}
+			if len(output) == 0 {
+				t.Fatal("processed output is empty")
+			}
+
+			ext := ".mp4"
+			if finalJob["outputType"] == "audio" {
+				ext = ".mp3"
+			}
+			outputPath := filepath.Join(t.TempDir(), "output"+ext)
+			if err := os.WriteFile(outputPath, output, 0o644); err != nil {
+				t.Fatalf("write output: %v", err)
+			}
+
+			streams := probeStreamTypes(t, outputPath)
+			if !slices.Equal(streams, test.wantStreams) {
+				t.Fatalf("output streams = %v, want %v", streams, test.wantStreams)
+			}
+			assertPlayable(t, outputPath)
+		})
 	}
 }
 

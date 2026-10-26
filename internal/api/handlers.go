@@ -57,7 +57,11 @@ func UploadHandler(database *sql.DB) http.HandlerFunc {
 
 		video, err := videoService.Upload(file, header)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			if service.IsUploadClientError(err) {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to process upload")
 			return
 		}
 
