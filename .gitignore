@@ -1,0 +1,100 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env file
+.env
+
+# Editor/IDE
+# .idea/
+# .vscode/
+
+UI/
+output/
+example*
+testing*
+
+*.db*
+*.mp4
+*.mp3
+
+# Motion runtime data
+uploads/
+outputs/
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Env files
+.env
+.env.local
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+
+# Binaries
+VideoProject
+*.exe
+# Backups
+*.bak
+web/*.bak
+
+# Internal development notes and reports (kept local, not for publication)
+/FINAL_REPORT.md
+/IMPLEMENTATION_PLAN.md
+/IMPLEMENTATION_PROGRESS.md
+/TODO.txt
+/ProjectSpec.md
+/PROCESSING_ENGINE_COMPLETION_REPORT.md
+/MOTION_HANDOFF.md
+/MOTION_STANDALONE_RELEASE_REPORT.md
+/MOTION_DEPLOYMENT_VALIDATION_REPORT.md
+/JAVA_*.md
+/SESSION_REPORTS/
+/docs/audit-report.md
+/docs/EDITOR_PLAN.md
+
+# Internal migration-era and phase documentation (kept local)
+/backend-java/JOB_SYSTEM_COMPLETION_REPORT.md
+/backend-java/TIMELINE_EDITOR_COMPLETION_REPORT.md
+/backend-java/docs/API_COMPATIBILITY.md
+/backend-java/docs/ARCHITECTURE.md
+/backend-java/docs/ASYNC_JOB_SYSTEM_DESIGN.md
+/backend-java/docs/HOME_SERVER_DEPLOYMENT.md
+/backend-java/docs/JAVA_INTERVIEW_NOTES.md
+/backend-java/docs/JAVA_MIGRATION.md
+/backend-java/docs/PHASE6_TIMELINE_COMPATIBILITY_AND_PLAN.md
+/backend-java/docs/PROCESSING_COMPATIBILITY.md
+/backend-java/docs/STORAGE_ENCRYPTION.md
+
+# Java build output
+/backend-java/target/
