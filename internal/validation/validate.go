@@ -145,10 +145,12 @@ func validateToAudio(op models.Operation) error {
 }
 
 func validateVolume(op models.Operation) error {
-	if math.IsNaN(op.Factor) || math.IsInf(op.Factor, 0) || op.Factor <= 0 {
-		return fmt.Errorf(
-			"volume factor must be greater than 0",
-		)
+	return ValidateVolumeFactor(op.Factor)
+}
+
+func ValidateVolumeFactor(factor float64) error {
+	if math.IsNaN(factor) || math.IsInf(factor, 0) || factor <= 0 {
+		return fmt.Errorf("volume factor must be greater than 0")
 	}
 
 	return nil

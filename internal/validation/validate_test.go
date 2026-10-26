@@ -2,6 +2,7 @@ package validation
 
 import (
 	"math"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -123,6 +124,45 @@ func TestValidateProcessRequestRejectsInvalidOperations(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), test.wantError) {
 				t.Fatalf("error = %q, want substring %q", err, test.wantError)
+			}
+		})
+	}
+}
+
+func TestValidateVolumeFactorBoundaries(t *testing.T) {
+	accepted := []float64{
+		math.SmallestNonzeroFloat64,
+		0.0001,
+		0.5,
+		1,
+		100,
+		math.MaxFloat64,
+	}
+	for _, factor := range accepted {
+		t.Run("accept "+strconv.FormatFloat(factor, 'g', -1, 64), func(t *testing.T) {
+			if err := ValidateVolumeFactor(factor); err != nil {
+				t.Fatalf("ValidateVolumeFactor(%v): %v", factor, err)
+			}
+		})
+	}
+
+	rejected := []float64{
+		0,
+		math.Copysign(0, -1),
+		-0.0001,
+		-1,
+		math.NaN(),
+		math.Inf(1),
+		math.Inf(-1),
+	}
+	for _, factor := range rejected {
+		t.Run("reject "+strconv.FormatFloat(factor, 'g', -1, 64), func(t *testing.T) {
+			err := ValidateVolumeFactor(factor)
+			if err == nil {
+				t.Fatalf("ValidateVolumeFactor(%v) unexpectedly succeeded", factor)
+			}
+			if !strings.Contains(err.Error(), "greater than 0") {
+				t.Fatalf("ValidateVolumeFactor(%v) error = %q", factor, err)
 			}
 		})
 	}
