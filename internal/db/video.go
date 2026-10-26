@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -300,16 +301,27 @@ func (s *VideoStore) ListExpiredVideos(before time.Time) ([]models.Video, error)
 		FROM videos
 		WHERE
 			created_at < ?
-			AND (
-				status = ?
-				OR status = ?
-				OR status = ?
+			AND status IN (?, ?, ?)
+			AND NOT EXISTS (
+				SELECT 1
+				FROM jobs
+				WHERE jobs.video_id = videos.id
+					AND (
+						jobs.status NOT IN (?, ?, ?)
+						OR jobs.created_at >= ?
+						OR jobs.finished_at >= ?
+					)
 			)
 	`,
 		before,
 		models.StatusCompleted,
 		models.StatusFailed,
 		models.StatusCancelled,
+		models.StatusCompleted,
+		models.StatusFailed,
+		models.StatusCancelled,
+		before,
+		before,
 	)
 	if err != nil {
 		return nil, err
@@ -317,6 +329,105 @@ func (s *VideoStore) ListExpiredVideos(before time.Time) ([]models.Video, error)
 	defer rows.Close()
 
 	return collectVideos(rows)
+}
+
+type CleanupJob struct {
+	ID         string
+	OutputPath string
+}
+
+type CleanupTarget struct {
+	VideoID      string
+	OriginalPath string
+	OutputPath   string
+	Jobs         []CleanupJob
+}
+
+func (s *VideoStore) DeleteExpiredVideo(id string, before time.Time) (*CleanupTarget, bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, false, fmt.Errorf("starting cleanup for video %s: %w", id, err)
+	}
+	defer tx.Rollback()
+
+	var (
+		target     CleanupTarget
+		status     string
+		createdAt  time.Time
+		outputPath sql.NullString
+	)
+	err = tx.QueryRow(`
+		SELECT original_path, output_path, status, created_at
+		FROM videos
+		WHERE id = ?
+	`, id).Scan(&target.OriginalPath, &outputPath, &status, &createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("loading expired video %s: %w", id, err)
+	}
+	if !models.IsTerminalJobStatus(status) || !createdAt.Before(before) {
+		return nil, false, nil
+	}
+	target.VideoID = id
+	target.OutputPath = outputPath.String
+
+	rows, err := tx.Query(`
+		SELECT id, COALESCE(output_path, ''), status, created_at, finished_at
+		FROM jobs
+		WHERE video_id = ?
+	`, id)
+	if err != nil {
+		return nil, false, fmt.Errorf("loading jobs for expired video %s: %w", id, err)
+	}
+
+	blocked := false
+	for rows.Next() {
+		var (
+			job        CleanupJob
+			jobStatus  string
+			jobCreated time.Time
+			finishedAt sql.NullTime
+		)
+		if err := rows.Scan(&job.ID, &job.OutputPath, &jobStatus, &jobCreated, &finishedAt); err != nil {
+			rows.Close()
+			return nil, false, fmt.Errorf("scanning jobs for expired video %s: %w", id, err)
+		}
+		target.Jobs = append(target.Jobs, job)
+		if !models.IsTerminalJobStatus(jobStatus) ||
+			!jobCreated.Before(before) ||
+			(finishedAt.Valid && !finishedAt.Time.Before(before)) {
+			blocked = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, false, fmt.Errorf("listing jobs for expired video %s: %w", id, err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, false, fmt.Errorf("closing jobs for expired video %s: %w", id, err)
+	}
+	if blocked {
+		return nil, false, nil
+	}
+
+	result, err := tx.Exec("DELETE FROM videos WHERE id = ?", id)
+	if err != nil {
+		return nil, false, fmt.Errorf("deleting expired video %s: %w", id, err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, false, fmt.Errorf("checking deleted video %s: %w", id, err)
+	}
+	if affected != 1 {
+		return nil, false, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, false, fmt.Errorf("committing cleanup for video %s: %w", id, err)
+	}
+
+	return &target, true, nil
 }
 
 func (s *VideoStore) Queue(id string, operations string) error {
