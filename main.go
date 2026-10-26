@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"VideoProject/internal/api"
 	"VideoProject/internal/db"
@@ -14,70 +19,74 @@ import (
 func main() {
 	logger.Init()
 
-	err := ensureDirectories()
-	if err != nil {
-		log.Fatalf(
-			"failed creating directories: %v",
-			err,
-		)
+	if err := ensureDirectories(); err != nil {
+		log.Fatalf("failed creating directories: %v", err)
 	}
 
 	database, err := db.Open("data/app.db")
 	if err != nil {
-		panic(err)
+		log.Fatalf("opening database: %v", err)
 	}
-	store := db.NewVideoStore(database)
+	defer database.Close()
 
-	// Set process to fail on server restart.
-	// This is easier to do than storing the operations and re trying, on restart
-	interrupted, err := store.ListProcessing()
-	if err != nil {
-		logger.Error.Printf("failed to load interrupted jobs: %v", err)
-	} else {
-		for _, v := range interrupted {
-			store.Fail(v.ID, "server restarted while processing")
-			logger.Info.Printf("aborted interrupted video=%s", v.ID)
-		}
+	videoStore := db.NewVideoStore(database)
+	jobStore := db.NewJobStore(database)
+	manager := job.NewManager(jobStore, 3)
+
+	if err := manager.Recover(); err != nil {
+		logger.Error.Printf("failed to recover jobs: %v", err)
 	}
 
-	// Recovered queued requests
-	queued, err := store.ListQueued()
-	if err != nil {
-		logger.Error.Printf("failed loading queued jobs: %v", err)
-	} else {
-		for _, v := range queued {
-			job.Enqueue(job.Job{VideoID: v.ID})
-		}
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	manager.Start(ctx)
+	go job.StartCleaner(videoStore, jobStore)
+
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           api.NewRouter(database, manager, "./web"),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	// At most 3 workers at a time.
-	job.StartWorkers(3, store)
-	// Cleanup every hour
-	go job.StartCleaner(store)
-
-	fs := http.FileServer(http.Dir("./web"))
-
-	mux := http.NewServeMux()
-	mux.Handle("/", fs)
-
-	mux.HandleFunc("POST /upload", api.UploadHandler(database))
-	mux.HandleFunc("GET /videos/{id}", api.GetVideoHandler(database))
-	mux.HandleFunc("POST /videos/{id}/process", api.ProcessHandler(database))
-	mux.HandleFunc("GET /videos/{id}/download", api.DownloadHandler(database))
-
-	// Middleware
-	handler := api.CORS(mux)
 
 	logger.Info.Println("Starting server on port 8080...")
-	if err := http.ListenAndServe(":8080", handler); err != nil {
-		log.Fatal(err)
+	logger.Info.Println("Open http://localhost:8080 in your browser")
+
+	serverErr := make(chan error, 1)
+	go func() {
+		err := server.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case err := <-serverErr:
+		logger.Error.Printf("server failed: %v", err)
+		stop()
+	case <-ctx.Done():
+		logger.Info.Println("shutdown requested")
 	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error.Printf("server shutdown failed: %v", err)
+	}
+
+	manager.Stop()
+	logger.Info.Println("server stopped")
 }
 
 func ensureDirectories() error {
 	dirs := []string{
 		"uploads",
 		"outputs",
+		"data",
 	}
 
 	for _, dir := range dirs {
