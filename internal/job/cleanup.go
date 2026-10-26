@@ -1,65 +1,71 @@
 package job
 
 import (
+	"errors"
 	"os"
 	"time"
 
 	"VideoProject/internal/db"
 	"VideoProject/internal/logger"
+	"VideoProject/internal/models"
 )
 
-func StartCleaner(store *db.VideoStore, jobs *db.JobStore) {
-	ticker := time.NewTicker(1 * time.Hour)
+const (
+	cleanupInterval  = time.Hour
+	cleanupRetention = 24 * time.Hour
+)
+
+func StartCleaner(store *db.VideoStore) {
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
 
 	for range ticker.C {
+		if err := cleanupExpired(store, time.Now()); err != nil {
+			logger.Error.Printf("cleanup failed err=%v", err)
+		}
+	}
+}
 
-		logger.Info.Println("cleanup started")
-		expiredBefore := time.Now().Add(-24 * time.Hour)
+func cleanupExpired(store *db.VideoStore, now time.Time) error {
+	logger.Info.Println("cleanup started")
+	expiredBefore := now.Add(-cleanupRetention)
 
-		videos, err := store.ListExpiredVideos(expiredBefore)
+	videos, err := store.ListExpiredVideos(expiredBefore)
+	if err != nil {
+		return err
+	}
+
+	var cleanupErrors []error
+	for _, video := range videos {
+		target, deleted, err := store.DeleteExpiredVideo(video.ID, expiredBefore)
 		if err != nil {
-			logger.Error.Printf("cleanup query failed err=%v", err)
+			cleanupErrors = append(cleanupErrors, err)
+			continue
+		}
+		if !deleted {
+			logger.Info.Printf("cleanup skipped video=%s because it is no longer eligible", video.ID)
 			continue
 		}
 
-		for _, video := range videos {
-
-			logger.Info.Printf("cleanup deleting=%s", video.ID)
-
-			jobHistory, err := jobs.ListForVideo(video.ID)
-			if err != nil {
-				logger.Error.Printf("cleanup list jobs failed video=%s err=%v", video.ID, err)
-			}
-			for i := range jobHistory {
-				removeJobArtifacts(&jobHistory[i])
-			}
-
-			// delete upload
-			if video.OriginalPath != "" {
-				err := os.Remove(video.OriginalPath)
-				if err != nil && !os.IsNotExist(err) {
-					logger.Error.Printf("cleanup delete upload failed video=%s err=%v", video.ID, err)
-				}
-			}
-
-			// delete the latest output as well, including legacy records
-			if video.OutputPath != "" {
-				err := os.Remove(video.OutputPath)
-				if err != nil && !os.IsNotExist(err) {
-					logger.Error.Printf("cleanup delete output failed video=%s err=%v", video.ID, err)
-				}
-			}
-
-			if err := jobs.DeleteForVideo(video.ID); err != nil {
-				logger.Error.Printf("cleanup delete job rows failed video=%s err=%v", video.ID, err)
-				continue
-			}
-
-			// remove DB row
-			err = store.Delete(video.ID)
-			if err != nil {
-				logger.Error.Printf("cleanup delete db row failed video=%s err=%v", video.ID, err)
-			}
+		logger.Info.Printf("cleanup deleting video=%s", target.VideoID)
+		for _, cleanupJob := range target.Jobs {
+			removeJobArtifacts(&models.Job{
+				ID:         cleanupJob.ID,
+				OutputPath: cleanupJob.OutputPath,
+			})
 		}
+		removeFile(target.OriginalPath, target.VideoID, "upload")
+		removeFile(target.OutputPath, target.VideoID, "output")
+	}
+
+	return errors.Join(cleanupErrors...)
+}
+
+func removeFile(path, videoID, kind string) {
+	if path == "" {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		logger.Error.Printf("cleanup delete %s failed video=%s err=%v", kind, videoID, err)
 	}
 }

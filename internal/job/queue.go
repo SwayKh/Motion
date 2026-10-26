@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"VideoProject/internal/db"
+	"VideoProject/internal/logger"
 	"VideoProject/internal/models"
 )
 
@@ -132,7 +133,7 @@ func removeJobArtifacts(job *models.Job) {
 		}
 		seen[path] = struct{}{}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			// Cleanup is best effort. Recovery will try again on the next start.
+			logger.Error.Printf("removing job artifact job=%s path=%s err=%v", job.ID, path, err)
 		}
 	}
 }
