@@ -13,6 +13,7 @@ type Video struct {
 	ID string
 
 	OriginalPath string
+	OriginalName string
 	OutputPath   string
 
 	Status   string
@@ -23,6 +24,7 @@ type Video struct {
 	Duration float64
 	Width    int
 	Height   int
+	FileSize int64
 
 	Error string
 
@@ -39,21 +41,91 @@ func NewVideoStore(db *sql.DB) *VideoStore {
 	}
 }
 
-func (s *VideoStore) Create(video models.Video) error {
+const videoColumns = `
+	id,
+	original_path,
+	output_path,
+	status,
+	progress,
+	operations,
+	duration,
+	width,
+	height,
+	error,
+	created_at,
+	original_name,
+	file_size
+`
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanVideo(row rowScanner) (*models.Video, error) {
+	var (
+		v            models.Video
+		outputPath   sql.NullString
+		operations   sql.NullString
+		errMsg       sql.NullString
+		originalName sql.NullString
+		progress     sql.NullFloat64
+		duration     sql.NullFloat64
+		width        sql.NullInt64
+		height       sql.NullInt64
+		fileSize     sql.NullInt64
+	)
+
+	err := row.Scan(
+		&v.ID,
+		&v.OriginalPath,
+		&outputPath,
+		&v.Status,
+		&progress,
+		&operations,
+		&duration,
+		&width,
+		&height,
+		&errMsg,
+		&v.CreatedAt,
+		&originalName,
+		&fileSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	v.OutputPath = outputPath.String
+	v.Operations = operations.String
+	v.Error = errMsg.String
+	v.OriginalName = originalName.String
+	v.Progress = progress.Float64
+	v.Duration = duration.Float64
+	v.Width = int(width.Int64)
+	v.Height = int(height.Int64)
+	v.FileSize = fileSize.Int64
+
+	return &v, nil
+}
+
+func (s *VideoStore) Create(video *models.Video) error {
 	_, err := s.db.Exec(`
 		INSERT INTO videos (
 			id,
 			original_path,
+			original_name,
+			file_size,
 			status,
 			progress,
 			duration,
 			width,
 			height
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		video.ID,
 		video.OriginalPath,
+		video.OriginalName,
+		video.FileSize,
 		video.Status,
 		video.Progress,
 		video.Duration,
@@ -64,46 +136,27 @@ func (s *VideoStore) Create(video models.Video) error {
 		return fmt.Errorf("creating video %s: %w", video.ID, err)
 	}
 
+	// Read the database-generated timestamp so callers can return a complete
+	// record immediately after creating it.
+	if err := s.db.QueryRow(
+		"SELECT created_at FROM videos WHERE id = ?",
+		video.ID,
+	).Scan(&video.CreatedAt); err != nil {
+		return fmt.Errorf("loading created video %s: %w", video.ID, err)
+	}
+
 	return nil
 }
 
 func (s *VideoStore) Get(id string) (*models.Video, error) {
 	logger.Info.Println("GET ID:", id)
 	row := s.db.QueryRow(`
-		SELECT
-			id,
-			original_path,
-			output_path,
-			status,
-			progress,
-            operations,
-			duration,
-			width,
-			height,
-			error,
-			created_at
+		SELECT `+videoColumns+`
 		FROM videos
 		WHERE id = ?
 	`, id)
 
-	var v models.Video
-
-	var outputPath sql.NullString
-	var errMsg sql.NullString
-
-	err := row.Scan(
-		&v.ID,
-		&v.OriginalPath,
-		&outputPath,
-		&v.Status,
-		&v.Progress,
-		&v.Operations,
-		&v.Duration,
-		&v.Width,
-		&v.Height,
-		&errMsg,
-		&v.CreatedAt,
-	)
+	v, err := scanVideo(row)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"getting video %s: %w",
@@ -112,11 +165,38 @@ func (s *VideoStore) Get(id string) (*models.Video, error) {
 		)
 	}
 
-	// IMPORTANT
-	v.OutputPath = outputPath.String
-	v.Error = errMsg.String
+	return v, nil
+}
 
-	return &v, nil
+func (s *VideoStore) List() ([]models.Video, error) {
+	rows, err := s.db.Query(`
+		SELECT ` + videoColumns + `
+		FROM videos
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("listing videos: %w", err)
+	}
+	defer rows.Close()
+
+	return collectVideos(rows)
+}
+
+func collectVideos(rows *sql.Rows) ([]models.Video, error) {
+	videos := make([]models.Video, 0)
+
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		videos = append(videos, *v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return videos, nil
 }
 
 func (s *VideoStore) UpdateStatus(id string, status string) error {
@@ -155,7 +235,8 @@ func (s *VideoStore) Complete(id string, outputPath string) error {
 		SET
 			output_path = ?,
 			status = ?,
-			progress = 100
+			progress = 100,
+			error = NULL
 		WHERE id = ?
 	`,
 		outputPath,
@@ -199,18 +280,7 @@ func (s *VideoStore) Delete(id string) error {
 
 func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 	rows, err := s.db.Query(`
-		SELECT
-			id,
-			original_path,
-			output_path,
-			status,
-			progress,
-            operations,
-			duration,
-			width,
-			height,
-			error,
-			created_at
+		SELECT `+videoColumns+`
 		FROM videos
 		WHERE status = ?
 	`,
@@ -221,104 +291,32 @@ func (s *VideoStore) ListProcessing() ([]models.Video, error) {
 	}
 	defer rows.Close()
 
-	var videos []models.Video
-
-	for rows.Next() {
-		var v models.Video
-		var outputPath sql.NullString
-		var errMsg sql.NullString
-
-		err := rows.Scan(
-			&v.ID,
-			&v.OriginalPath,
-			&outputPath, // was &v.OutputPath
-			&v.Status,
-			&v.Progress,
-			&v.Operations,
-			&v.Duration,
-			&v.Width,
-			&v.Height,
-			&errMsg, // was &v.Error
-			&v.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		v.OutputPath = outputPath.String
-		v.Error = errMsg.String
-
-		videos = append(videos, v)
-	}
-
-	return videos, nil
+	return collectVideos(rows)
 }
 
 func (s *VideoStore) ListExpiredVideos(before time.Time) ([]models.Video, error) {
 	rows, err := s.db.Query(`
-		SELECT
-			id,
-			original_path,
-			output_path,
-			status,
-			progress,
-            operations,
-			duration,
-			width,
-			height,
-			error,
-			created_at
+		SELECT `+videoColumns+`
 		FROM videos
 		WHERE
 			created_at < ?
 			AND (
 				status = ?
 				OR status = ?
+				OR status = ?
 			)
 	`,
 		before,
 		models.StatusCompleted,
 		models.StatusFailed,
+		models.StatusCancelled,
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	defer rows.Close()
 
-	var videos []models.Video
-
-	for rows.Next() {
-
-		var v models.Video
-
-		var outputPath sql.NullString
-		var errMsg sql.NullString
-
-		err := rows.Scan(
-			&v.ID,
-			&v.OriginalPath,
-			&outputPath,
-			&v.Status,
-			&v.Progress,
-			&v.Operations,
-			&v.Duration,
-			&v.Width,
-			&v.Height,
-			&errMsg,
-			&v.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		v.OutputPath = outputPath.String
-		v.Error = errMsg.String
-
-		videos = append(videos, v)
-	}
-
-	return videos, nil
+	return collectVideos(rows)
 }
 
 func (s *VideoStore) Queue(id string, operations string) error {
@@ -326,7 +324,9 @@ func (s *VideoStore) Queue(id string, operations string) error {
         UPDATE videos
         SET
             status = ?,
-            operations = ?
+            operations = ?,
+            progress = 0,
+            error = NULL
         WHERE id = ?
     `,
 		models.StatusQueued,
@@ -337,20 +337,58 @@ func (s *VideoStore) Queue(id string, operations string) error {
 	return err
 }
 
+// QueueIfUploaded atomically moves a video from uploaded to queued. The
+// conditional update prevents two concurrent requests from queueing the same
+// video twice.
+func (s *VideoStore) QueueIfUploaded(id string, operations string) (bool, error) {
+	result, err := s.db.Exec(`
+        UPDATE videos
+        SET
+            status = ?,
+            operations = ?,
+            progress = 0,
+            error = NULL
+        WHERE id = ? AND status = ?
+    `,
+		models.StatusQueued,
+		operations,
+		id,
+		models.StatusUploaded,
+	)
+	if err != nil {
+		return false, fmt.Errorf("queueing video %s: %w", id, err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("queueing video %s: %w", id, err)
+	}
+
+	return affected == 1, nil
+}
+
+func (s *VideoStore) ResetToUploaded(id string) error {
+	_, err := s.db.Exec(`
+        UPDATE videos
+        SET
+            status = ?,
+            operations = NULL,
+            progress = 0,
+            error = NULL
+        WHERE id = ?
+    `,
+		models.StatusUploaded,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("resetting video %s: %w", id, err)
+	}
+	return nil
+}
+
 func (s *VideoStore) ListQueued() ([]models.Video, error) {
 	rows, err := s.db.Query(`
-        SELECT
-            id,
-            original_path,
-            output_path,
-            status,
-            progress,
-            operations,
-            duration,
-            width,
-            height,
-            error,
-            created_at
+        SELECT `+videoColumns+`
         FROM videos
         WHERE status = ?
     `, models.StatusQueued)
@@ -359,35 +397,5 @@ func (s *VideoStore) ListQueued() ([]models.Video, error) {
 	}
 	defer rows.Close()
 
-	var videos []models.Video
-
-	for rows.Next() {
-		var v models.Video
-		var outputPath sql.NullString
-		var errMsg sql.NullString
-
-		err := rows.Scan(
-			&v.ID,
-			&v.OriginalPath,
-			&outputPath, // was &v.OutputPath
-			&v.Status,
-			&v.Progress,
-			&v.Operations,
-			&v.Duration,
-			&v.Width,
-			&v.Height,
-			&errMsg, // was &v.Error
-			&v.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		v.OutputPath = outputPath.String
-		v.Error = errMsg.String
-
-		videos = append(videos, v)
-	}
-
-	return videos, nil
+	return collectVideos(rows)
 }
