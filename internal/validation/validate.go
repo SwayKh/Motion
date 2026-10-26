@@ -2,6 +2,9 @@ package validation
 
 import (
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"VideoProject/internal/ffmpeg"
@@ -10,7 +13,7 @@ import (
 
 const (
 	MaxOperations = 10
-	MinSpeed      = 0.25
+	MinSpeed      = 0.5
 	MaxSpeed      = 2.0
 )
 
@@ -25,6 +28,8 @@ func ValidateProcessRequest(video *models.Video, req models.ProcessRequest) erro
 			MaxOperations,
 		)
 	}
+
+	toAudioIndex := -1
 
 	for i, op := range req.Operations {
 		switch op.Type {
@@ -69,6 +74,14 @@ func ValidateProcessRequest(video *models.Video, req models.ProcessRequest) erro
 				)
 			}
 		case "to_audio":
+			if toAudioIndex != -1 {
+				return fmt.Errorf(
+					"operation %d to_audio invalid: only one extract audio operation is allowed",
+					i,
+				)
+			}
+			toAudioIndex = i
+
 			err := validateToAudio(op)
 			if err != nil {
 				return fmt.Errorf(
@@ -87,6 +100,16 @@ func ValidateProcessRequest(video *models.Video, req models.ProcessRequest) erro
 		}
 	}
 
+	// Extract audio disables the video stream, so anything after it would be
+	// silently ignored by the dispatcher. Reject it instead of surprising the
+	// user with a partial result.
+	if toAudioIndex != -1 && toAudioIndex != len(req.Operations)-1 {
+		return fmt.Errorf(
+			"operation %d to_audio invalid: extract audio must be the last operation",
+			toAudioIndex,
+		)
+	}
+
 	return nil
 }
 
@@ -103,7 +126,8 @@ func validateFlip(op models.Operation) error {
 }
 
 func validateSpeed(op models.Operation) error {
-	if op.Factor < MinSpeed ||
+	if math.IsNaN(op.Factor) || math.IsInf(op.Factor, 0) ||
+		op.Factor < MinSpeed ||
 		op.Factor > MaxSpeed {
 
 		return fmt.Errorf(
@@ -121,7 +145,7 @@ func validateToAudio(op models.Operation) error {
 }
 
 func validateVolume(op models.Operation) error {
-	if op.Factor <= 0 {
+	if math.IsNaN(op.Factor) || math.IsInf(op.Factor, 0) || op.Factor <= 0 {
 		return fmt.Errorf(
 			"volume factor must be greater than 0",
 		)
@@ -147,11 +171,7 @@ func validateTrim(video *models.Video, op models.Operation) error {
 		)
 	}
 
-	duration := time.Duration(
-		video.Duration * float64(time.Second),
-	)
-
-	if end > duration {
+	if video.Duration > 0 && end.Seconds() > video.Duration+0.001 {
 		return fmt.Errorf(
 			"trim end exceeds video duration",
 		)
@@ -160,18 +180,58 @@ func validateTrim(video *models.Video, op models.Operation) error {
 	return nil
 }
 
+// parseTimestamp accepts plain seconds ("12", "12.5"), MM:SS, or HH:MM:SS
+// timestamps. Fractional seconds are supported in every form.
 func parseTimestamp(s string) (time.Duration, error) {
-	t, err := time.Parse(
-		"15:04:05",
-		s,
-	)
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("timestamp is empty")
+	}
+
+	seconds, err := parseSeconds(s)
 	if err != nil {
 		return 0, err
 	}
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds < 0 {
+		return 0, fmt.Errorf("timestamp must be a non-negative number")
+	}
 
-	duration := time.Duration(t.Hour())*time.Hour +
-		time.Duration(t.Minute())*time.Minute +
-		time.Duration(t.Second())*time.Second
+	return time.Duration(seconds * float64(time.Second)), nil
+}
 
-	return duration, nil
+func parseSeconds(s string) (float64, error) {
+	if !strings.Contains(s, ":") {
+		return strconv.ParseFloat(s, 64)
+	}
+
+	parts := strings.Split(s, ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return 0, fmt.Errorf("invalid timestamp")
+	}
+
+	var total float64
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return 0, fmt.Errorf("invalid timestamp")
+		}
+
+		value, err := strconv.ParseFloat(part, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid timestamp")
+		}
+		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+			return 0, fmt.Errorf("invalid timestamp")
+		}
+
+		// Minutes and seconds must be less than 60 when a larger unit is
+		// present.
+		if i > 0 && value >= 60 {
+			return 0, fmt.Errorf("invalid timestamp")
+		}
+
+		total = total*60 + value
+	}
+
+	return total, nil
 }
