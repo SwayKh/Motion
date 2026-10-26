@@ -8,7 +8,7 @@ import (
 	"VideoProject/internal/logger"
 )
 
-func StartCleaner(store *db.VideoStore) {
+func StartCleaner(store *db.VideoStore, jobs *db.JobStore) {
 	ticker := time.NewTicker(1 * time.Hour)
 
 	for range ticker.C {
@@ -26,6 +26,14 @@ func StartCleaner(store *db.VideoStore) {
 
 			logger.Info.Printf("cleanup deleting=%s", video.ID)
 
+			jobHistory, err := jobs.ListForVideo(video.ID)
+			if err != nil {
+				logger.Error.Printf("cleanup list jobs failed video=%s err=%v", video.ID, err)
+			}
+			for i := range jobHistory {
+				removeJobArtifacts(&jobHistory[i])
+			}
+
 			// delete upload
 			if video.OriginalPath != "" {
 				err := os.Remove(video.OriginalPath)
@@ -34,7 +42,7 @@ func StartCleaner(store *db.VideoStore) {
 				}
 			}
 
-			// delete output
+			// delete the latest output as well, including legacy records
 			if video.OutputPath != "" {
 				err := os.Remove(video.OutputPath)
 				if err != nil && !os.IsNotExist(err) {
@@ -42,8 +50,13 @@ func StartCleaner(store *db.VideoStore) {
 				}
 			}
 
+			if err := jobs.DeleteForVideo(video.ID); err != nil {
+				logger.Error.Printf("cleanup delete job rows failed video=%s err=%v", video.ID, err)
+				continue
+			}
+
 			// remove DB row
-			err := store.Delete(video.ID)
+			err = store.Delete(video.ID)
 			if err != nil {
 				logger.Error.Printf("cleanup delete db row failed video=%s err=%v", video.ID, err)
 			}
