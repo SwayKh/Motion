@@ -1,7 +1,10 @@
 package ffmpeg
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"strings"
 
 	"VideoProject/internal/media"
 
@@ -30,7 +33,7 @@ type Processor struct {
 
 	disableVideo bool
 	audioQuality *int
-	vsync        *int
+	fpsMode      *string
 
 	progress func(float64)
 }
@@ -91,10 +94,11 @@ func (p *Processor) Speed(multiplier float64) *Processor {
 	}
 	p.audioSpeed(multiplier)
 	p.videoSpeed(multiplier)
-	// optional default
-	if p.vsync == nil {
-		v := 0
-		p.vsync = &v
+	// Keep the source frame timestamps instead of letting ffmpeg drop or
+	// duplicate frames while the presentation timestamps are rewritten.
+	if p.fpsMode == nil {
+		mode := "passthrough"
+		p.fpsMode = &mode
 	}
 	return p
 }
@@ -123,7 +127,18 @@ func (p *Processor) VideoCodec(codec string) *Processor {
 }
 
 func (p *Processor) VSync(mode int) *Processor {
-	p.vsync = &mode // ✅ perfectly fine
+	var value string
+	switch mode {
+	case 0:
+		value = "passthrough"
+	case 1:
+		value = "cfr"
+	case 2:
+		value = "vfr"
+	default:
+		return p
+	}
+	p.fpsMode = &value
 	return p
 }
 
@@ -150,20 +165,31 @@ func (p *Processor) Flip(orient Orientation) *Processor {
 func (p *Processor) Trim(start, end string) *Processor {
 	if p.video != nil {
 		p.video = p.video.
-			Filter("trim", ffmpeg_go.Args{fmt.Sprintf("start=%s:end=%s", start, end)}).
+			Filter("trim", ffmpeg_go.Args{fmt.Sprintf("start=%s:end=%s", escapeFilterValue(start), escapeFilterValue(end))}).
 			Filter("setpts", ffmpeg_go.Args{"PTS-STARTPTS"})
 		p.videoModified = true
 	}
 	if p.audio != nil {
 		p.audio = p.audio.
-			Filter("atrim", ffmpeg_go.Args{fmt.Sprintf("start=%s:end=%s", start, end)}).
+			Filter("atrim", ffmpeg_go.Args{fmt.Sprintf("start=%s:end=%s", escapeFilterValue(start), escapeFilterValue(end))}).
 			Filter("asetpts", ffmpeg_go.Args{"PTS-STARTPTS"})
 		p.audioModified = true
 	}
 	return p
 }
 
+// escapeFilterValue escapes characters that the filtergraph parser would
+// otherwise treat as option separators. The value is parsed twice, so the
+// backslash itself must also be escaped.
+func escapeFilterValue(value string) string {
+	return strings.ReplaceAll(value, ":", `\:`)
+}
+
 func (p *Processor) Output(path string) error {
+	return p.OutputContext(context.Background(), path)
+}
+
+func (p *Processor) OutputContext(ctx context.Context, path string) error {
 	var streams []*ffmpeg_go.Stream
 
 	if p.disableVideo {
@@ -174,8 +200,8 @@ func (p *Processor) Output(path string) error {
 		p.kwArgs["q:a"] = *p.audioQuality
 	}
 
-	if p.vsync != nil {
-		p.kwArgs["vsync"] = *p.vsync
+	if p.fpsMode != nil {
+		p.kwArgs["fps_mode"] = *p.fpsMode
 	}
 
 	// Copy optimization
@@ -199,14 +225,32 @@ func (p *Processor) Output(path string) error {
 		streams = append(streams, p.audio)
 	}
 
+	if len(streams) == 0 {
+		return fmt.Errorf("no output streams available; the source is missing the required audio or video stream")
+	}
+
 	// Enable ffmpeg progress output
 	p.kwArgs["progress"] = "pipe:1"
 	p.kwArgs["nostats"] = ""
 
+	// Read the duration before starting ffmpeg. If probing fails we simply
+	// skip progress updates; we must not return after cmd.Start without
+	// waiting on the child process.
+	var totalDuration float64
+	if p.progress != nil {
+		raw, err := p.GetMetadata()
+		if err == nil {
+			meta, err := media.ExtractMetaData(raw)
+			if err == nil {
+				totalDuration = meta.Duration
+			}
+		}
+	}
+
 	// The Compile, Start, Wait pipeline is needed to write the progress of
 	// command to the struct, so that it can be polled for progress.
 	cmd := ffmpeg_go.
-		Output(streams, path, p.kwArgs).
+		OutputContext(ctx, streams, path, p.kwArgs).
 		OverWriteOutput().
 		Compile()
 
@@ -221,21 +265,16 @@ func (p *Processor) Output(path string) error {
 		return fmt.Errorf("ffmpeg run command: %w", err)
 	}
 
-	// Start progress parser
-	if p.progress != nil {
-
-		raw, err := p.GetMetadata()
-		if err != nil {
-			return fmt.Errorf("getting metadata: %w", err)
-		}
-		meta, err := media.ExtractMetaData(raw)
-		if err == nil && meta.Duration > 0 {
-			go parseProgress(
-				stdout,
-				meta.Duration,
-				p.progress,
-			)
-		}
+	// Start progress parser. If progress is unavailable, still drain the
+	// progress pipe so a long-running ffmpeg process cannot block on it.
+	if p.progress != nil && totalDuration > 0 {
+		go parseProgress(
+			stdout,
+			totalDuration,
+			p.progress,
+		)
+	} else {
+		go io.Copy(io.Discard, stdout)
 	}
 
 	return cmd.Wait()
