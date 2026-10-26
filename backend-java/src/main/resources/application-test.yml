@@ -1,0 +1,23 @@
+# Isolated profile for automated tests. Tests override data directories with @TempDir.
+motion:
+  env: test
+  email:
+    dev-outbox: false
+  # Tests upload/process repeatedly within seconds; disable throttling so suites
+  # exercise functionality rather than the limiter (covered by RateLimitIntegrationTest).
+  rate-limit:
+    login: 100000
+    register: 100000
+    reset: 100000
+    verify: 100000
+    upload: 100000
+  storage:
+    data-dir: target/test-data
+    upload-dir: target/test-uploads
+    output-dir: target/test-outputs
+    temp-dir: target/test-data/tmp
+    preview-dir: target/test-data/previews
+
+logging:
+  level:
+    com.motion: WARN
