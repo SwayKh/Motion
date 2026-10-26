@@ -19,7 +19,7 @@ The project is aimed at developers and hobbyists who want a small, readable exam
 - Progress reporting parsed from FFmpeg's `-progress pipe:1` output.
 - Cancellation of queued jobs and interruption of running FFmpeg jobs.
 - Recovery of jobs interrupted by a crash or graceful restart.
-- Hourly cleanup of terminal videos and their job history after 24 hours.
+- Hourly cleanup of terminal videos and their job history once the video and all jobs are at least 24 hours old.
 - CORS middleware and an optional static frontend served from `./web`.
 
 ### Frontend
@@ -43,7 +43,7 @@ The project is aimed at developers and hobbyists who want a small, readable exam
 | Required stream | A video stream must be present | FFprobe metadata after upload |
 | Supported extensions | `.mp4`, `.m4v`, `.mov`, `.mkv`, `.webm`, `.avi`, `.mpeg`, `.mpg`, `.3gp` | Extension allowlist |
 
-The extension check is not a codec guarantee. Files are also probed with FFprobe, and corrupt or non-media files are rejected. Because the 150 MiB limit applies to the whole multipart request, a file very close to 150 MiB can fail due to multipart overhead. Audio-only uploads are currently rejected by the video-stream check. Conversely, a video-only upload is accepted, but every supported processing operation currently fails on a source without an audio track because the output graph always maps audio.
+The extension check is not a codec guarantee. Files are also probed with FFprobe, and corrupt or non-media files are rejected. Because the 150 MiB limit applies to the whole multipart request, a file very close to 150 MiB can fail due to multipart overhead. Audio-only uploads are currently rejected by the video-stream check. Video-only uploads are accepted; `trim`, `speed`, and `flip` work without audio, while `volume` and `to_audio` fail with an explicit missing-audio job error. Invalid media and other client mistakes return `400`; storage, probing-infrastructure, and database failures return `500`.
 
 ### Not implemented
 
@@ -102,7 +102,7 @@ flowchart LR
     Workers -->|status + progress| DB
     Outputs -->|rename on success| API
     API -->|preview/download| Browser
-    Cleaner["Hourly cleaner"] -->|delete terminal videos older than 24h| DB
+    Cleaner["Hourly cleaner"] -->|delete eligible videos and jobs after 24h| DB
 ```
 
 For package-level details, concurrency behavior, and lifecycle transitions, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -227,15 +227,15 @@ There are **no environment variables, command-line flags, or configuration files
 | Database path | `data/app.db` | `main.go:26` |
 | Runtime directories | `uploads/`, `outputs/`, `data/` | `main.go:85-98` |
 | Worker count | `3` | `main.go:34` |
-| Upload body limit | 150 MiB | `internal/api/handlers.go:22`, `internal/service/process.go:36` |
+| Upload body limit | 150 MiB | `internal/api/handlers.go:22`, `internal/service/process.go:38` |
 | Process request body limit | 1 MiB | `internal/api/handlers.go:23` |
-| Maximum duration | 300 seconds | `internal/service/process.go:100` |
-| Maximum width/height | 1920 / 1080 | `internal/service/process.go:105` |
+| Maximum duration | 300 seconds | `internal/service/process.go:139` |
+| Maximum width/height | 1920 / 1080 | `internal/service/process.go:144` |
 | Maximum operations | 10 | `internal/validation/validate.go:15` |
 | Speed range | 0.5–2.0 inclusive | `internal/validation/validate.go:16-17` |
-| Job list default limit | 200 | `internal/api/handlers.go:137`, `internal/db/job.go:197-200` |
-| Cleanup interval | 1 hour | `internal/job/cleanup.go:12` |
-| Retention age | 24 hours from video creation | `internal/job/cleanup.go:17` |
+| Job list default limit | 200 | `internal/api/handlers.go:141`, `internal/db/job.go:197-200` |
+| Cleanup interval | 1 hour | `internal/job/cleanup.go:13-16` |
+| Retention age | Video and every associated job must be at least 24 hours old | `internal/job/cleanup.go:13-15`, `internal/db/video.go` |
 | CORS policy | any origin, any method/header | `internal/api/middleware.go` |
 
 The listen address binds to all network interfaces, not only loopback. The server has no authentication; see [Security and limitations](#security-and-limitations).
@@ -272,7 +272,7 @@ Additional behavior and constraints:
 - `trim` uses the current stream state. Multiple trims are not explicitly forbidden.
 - `to_audio` must be last because later video operations would be silently discarded; the validator rejects that ordering.
 - `flip` before `to_audio` is accepted but has no effect on the audio-only output; the frontend displays a warning.
-- All supported operations currently require the source to contain an audio stream. The FFmpeg wrapper always maps an audio output, so a video-only upload fails processing with a generic error even for `flip`, `trim`, or a video-only `speed` pipeline. `to_audio` probes for audio early and reports a more specific error.
+- The source is probed once before the pipeline. `trim`, `speed`, and `flip` work for video-only sources because audio is mapped only when present. `volume` and `to_audio` require audio and fail early with an explicit job error when it is missing. Volume factors must be finite and greater than zero at both the API and service layers; zero is not treated as mute.
 - The output container is `.mp4` for all non-audio pipelines and `.mp3` for `to_audio`. This is not a general format-conversion feature.
 - Unmodified video/audio streams may be stream-copied into the `.mp4` output, so compatibility depends on the source codecs. For example, a codec that cannot be placed in MP4 may make the job fail.
 - Progress is computed from FFmpeg's `out_time_ms` against the **source** duration. Trimmed or sped-up outputs may therefore show inaccurate intermediate progress; completion is explicitly set to 100.
@@ -375,7 +375,9 @@ On startup, before workers begin, the manager repairs jobs left in `processing` 
 
 Already-queued jobs remain queued and are picked up normally. On graceful shutdown, the HTTP server stops first, then the manager cancels its context; running jobs are interrupted and requeued (or cancelled if cancellation was requested).
 
-A cleanup goroutine runs every hour and deletes videos whose **creation time** is older than 24 hours and whose status is `completed`, `failed`, or `cancelled`. It removes the original, the latest output, every job's output artifacts, the job rows, and finally the video row. Uploaded, queued, processing, and cancel-requested videos are not expired. Because the age is based on upload time rather than job completion time, a recently completed job can expire if its source was uploaded more than 24 hours earlier.
+A cleanup goroutine runs every hour and deletes terminal videos only when the video **and every associated job** are at least 24 hours old. The video must be `completed`, `failed`, or `cancelled`; every job must be terminal, its creation time must be old enough, and any finish time must also be old enough. Active jobs and recently created or finished jobs protect the whole video from cleanup. Uploaded, queued, processing, and cancel-requested videos are never expired.
+
+Deletion is transactional: the cleanup query revalidates eligibility, deletes the video row and cascades its job rows together, and only then removes the original, latest output, and per-job artifacts. If the database deletion fails, rows and files are left intact for a later attempt. File removal is best effort after the database commit, so a filesystem error can leave an orphaned file but not a database row that points at a missing file. Job history is still retained only as long as its video.
 
 For a deeper treatment, including race handling and shutdown behavior, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -433,16 +435,17 @@ The API tests skip video-processing cases when FFmpeg/FFprobe are not installed.
 
 Common issues:
 
-- **FFmpeg/FFprobe not found**: uploads fail during metadata probing and processing fails. Check `command -v ffmpeg ffprobe` and ensure both are on the `PATH` used to start the server. The app does not validate tools at startup.
+- **FFmpeg/FFprobe not found**: uploads return `500` because probing infrastructure is unavailable, and processing fails. Check `command -v ffmpeg ffprobe` and ensure both are on the `PATH` used to start the server. The app does not validate tools at startup.
 - **Upload rejected (400)**: check the extension, file corruption, duration (≤ 300 s), dimensions (width ≤ 1920 and height ≤ 1080), and whether a video stream exists. Inspect with `ffprobe sample.mp4`.
 - **Upload rejected (413)**: the request exceeds 150 MiB, including multipart overhead.
-- **Processing failed**: read the job's `error` and the server logs. FFmpeg's compiled command and error output go to the server's stderr/stdout. Common causes are a missing audio track (all operations currently map audio, not only `to_audio`), incompatible stream copy into MP4, or unsupported input codecs.
+- **Upload failed (500)**: the server could not save the file, run the media probe, or persist the database row. Check the server log for the underlying error; the HTTP response intentionally omits filesystem paths and internal details.
+- **Processing failed**: read the job's `error` and the server logs. FFmpeg's compiled command and error output go to the server's stderr/stdout. Common causes are `volume` or `to_audio` on a source without audio, incompatible stream copy into MP4, or unsupported input codecs.
 - **Job appears stuck**: queued jobs wait for a free worker. Only `processing` and `cancel_requested` jobs are repaired on restart; queued jobs stay queued until a worker claims them. There is no retry endpoint for a failed job; submit a new processing request.
 - **SQLite permission or locking errors**: ensure the process can write `data/`, and avoid external writers holding long transactions. The app uses a single connection, WAL, and a 5-second busy timeout.
-- **Missing output (404)**: the output may never have completed, may have been removed, or may have been cleaned up. Cleanup uses a 24-hour age from video creation and runs hourly.
+- **Missing output (404)**: the output may never have completed, may have been removed, or may have been cleaned up. Cleanup requires the video and all of its jobs to be at least 24 hours old and runs hourly.
 - **Port conflict**: the port is hardcoded. Stop the process using port 8080 or change `Addr` in `main.go` and rebuild. On Linux, `ss -ltnp | grep 8080` helps identify the process.
 - **Frontend loads but API calls fail**: start the server from the repository root so `./web` and the relative data directories resolve correctly. Check the browser console and the server log.
-- **Job history does not load**: the frontend treats job history as supplemental, but `state.latestJobIds` is only initialized after a successful `/jobs` response; a `/jobs` failure during startup can disrupt library rendering until a refresh succeeds. This is a current frontend fragility, not an API failure.
+- **Job history does not load**: the frontend treats job history as supplemental. If `/jobs` fails, the library still renders without history and recovers on the next successful load.
 
 For detailed troubleshooting and manual tests, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
@@ -470,14 +473,14 @@ These are potential improvements, **not implemented features**:
 
 - Authentication, user accounts, and per-user isolation of videos/jobs.
 - Environment-variable or flag-based configuration (port, paths, worker count, limits).
-- A delete endpoint and retention based on job completion time rather than upload time.
+- A delete endpoint and configurable retention policy.
 - Rate limiting, per-IP quotas, and resource limits/timeouts for FFmpeg.
 - More editing operations (rotate, resize, crop, format conversion, GIF, subtitles).
 - Push-based progress (SSE/WebSocket) instead of polling.
 - More accurate progress for trimmed and speed-adjusted outputs.
 - Pagination and independent retention/cleanup for job history.
 - Docker and deployment examples.
-- Expanded automated tests for cleanup, cancellation races, and frontend behavior.
+- Expanded automated tests for cancellation races and frontend behavior.
 
 ## Documentation
 
