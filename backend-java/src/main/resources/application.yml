@@ -1,0 +1,144 @@
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  error:
+    include-message: never
+    include-stacktrace: never
+
+spring:
+  application:
+    name: motion-java
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  datasource:
+    # Override with MOTION_JDBC_URL for tests or non-default locations.
+    url: ${MOTION_JDBC_URL:jdbc:sqlite:${MOTION_DATA_DIR:data}/app.db?busy_timeout=5000&journal_mode=WAL}
+    driver-class-name: org.sqlite.JDBC
+    username: ${MOTION_DB_USER:sa}
+    password: ${MOTION_DB_PASSWORD:}
+    hikari:
+      # Go serialises all database work through one connection.
+      maximum-pool-size: ${MOTION_DB_POOL_SIZE:1}
+      minimum-idle: 1
+      connection-timeout: 10000
+      validation-timeout: 5000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-init-sql: PRAGMA foreign_keys=ON
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.community.dialect.SQLiteDialect
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+        show_sql: false
+  flyway:
+    # Single clean baseline for fresh standalone installations.
+    enabled: ${MOTION_FLYWAY_ENABLED:true}
+    locations: classpath:db/migration
+    validate-migration-naming: true
+  servlet:
+    multipart:
+      max-file-size: ${MOTION_MULTIPART_MAX_FILE_SIZE:150MB}
+      max-request-size: ${MOTION_MULTIPART_MAX_REQUEST_SIZE:150MB}
+      file-size-threshold: 32MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Go exposes only /health. Keep Actuator completely off the web surface.
+        include: none
+  endpoint:
+    health:
+      show-details: never
+
+springdoc:
+  api-docs:
+    # Opt-in for explicit development use; never on by default.
+    enabled: ${SPRINGDOC_ENABLED:false}
+    path: /api-docs
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:false}
+    path: /swagger-ui.html
+  override-with-generic-response: false
+
+logging:
+  level:
+    root: INFO
+    com.motion: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ} %-5level %logger{36} - %msg%n"
+
+motion:
+  env: ${APP_ENV:development}
+  base-url: ${BASE_URL:http://localhost:8080}
+  session:
+    ttl: ${SESSION_TTL:24h}
+    idle-ttl: ${SESSION_IDLE_TTL:2h}
+    secure-cookies: ${SECURE_COOKIES:}
+  cors:
+    trusted-origins: ${TRUSTED_ORIGINS:}
+  proxy:
+    trusted-proxies: ${TRUSTED_PROXIES:}
+  rate-limit:
+    login: ${RATE_LIMIT_LOGIN:10}
+    register: ${RATE_LIMIT_REGISTER:5}
+    reset: ${RATE_LIMIT_RESET:3}
+    verify: ${RATE_LIMIT_VERIFY:5}
+    # Parsed for configuration compatibility; Go does not wire an upload limiter.
+    upload: ${RATE_LIMIT_UPLOAD:30}
+  email:
+    smtp-host: ${SMTP_HOST:}
+    smtp-port: ${SMTP_PORT:587}
+    smtp-user: ${SMTP_USER:}
+    smtp-pass: ${SMTP_PASS:}
+    smtp-from: ${SMTP_FROM:}
+    dev-outbox: ${DEV_EMAIL_OUTBOX:true}
+  verification:
+    required: ${REQUIRE_EMAIL_VERIFICATION:false}
+    ttl: ${EMAIL_VERIFICATION_TTL:24h}
+  storage:
+    data-dir: ${MOTION_DATA_DIR:data}
+    upload-dir: ${MOTION_UPLOAD_DIR:uploads}
+    output-dir: ${MOTION_OUTPUT_DIR:outputs}
+    temp-dir: ${MOTION_TEMP_DIR:}
+    preview-dir: ${MOTION_PREVIEW_DIR:}
+  # Go passes ./web to api.NewRouter. Keep the same default and allow a disposable
+  # fixture directory in tests or a mounted directory in containers.
+  static-dir: ${MOTION_STATIC_DIR:./web}
+  encryption:
+    key: ${MOTION_ENCRYPTION_KEY:}
+  cleanup:
+    retention: ${RETENTION:24h}
+    interval: ${CLEANUP_INTERVAL:1h}
+  upload:
+    max-bytes: ${MAX_UPLOAD_BYTES:157286400}
+    max-duration-seconds: ${MAX_DURATION_SECONDS:300}
+    max-width: ${MAX_WIDTH:1920}
+    max-height: ${MAX_HEIGHT:1080}
+  quota:
+    max-active-uploads-per-user: ${MAX_ACTIVE_UPLOADS_PER_USER:3}
+    max-source-files-per-user: ${MAX_SOURCE_FILES_PER_USER:50}
+    max-outputs-per-user: ${MAX_OUTPUTS_PER_USER:200}
+    max-stored-bytes-per-user: ${MAX_STORED_BYTES_PER_USER:5368709120}
+    max-total-storage-bytes: ${MAX_TOTAL_STORAGE_BYTES:53687091200}
+    min-free-disk-bytes: ${MIN_FREE_DISK_BYTES:1073741824}
+  jobs:
+    max-concurrent-jobs-per-user: ${MAX_CONCURRENT_JOBS_PER_USER:2}
+    max-global-concurrent-jobs: ${MAX_GLOBAL_CONCURRENT_JOBS:3}
+    # Bounded worker/wake queues. Jobs themselves live in the durable jobs table.
+    worker-count: ${MOTION_JOB_WORKERS:3}
+    queue-capacity: ${MOTION_JOB_QUEUE_CAPACITY:100}
+    max-queued-jobs: ${MOTION_MAX_QUEUED_JOBS:200}
+    poll-interval: ${MOTION_JOB_POLL_INTERVAL:2s}
+    progress-interval: ${MOTION_JOB_PROGRESS_INTERVAL:500ms}
+    shutdown-timeout: ${MOTION_JOB_SHUTDOWN_TIMEOUT:30s}
+    # Hard wall-clock limit for a single FFmpeg execution (bounded work, no hung workers).
+    ffmpeg-timeout: ${MOTION_FFMPEG_TIMEOUT:2h}

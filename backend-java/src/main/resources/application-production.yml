@@ -1,0 +1,27 @@
+# Production defaults. Secrets must be supplied through the environment.
+motion:
+  env: production
+  email:
+    dev-outbox: false
+  storage:
+    data-dir: /app/data
+    upload-dir: /app/uploads
+    output-dir: /app/outputs
+
+# Production exposes exactly the Go-compatible /health route; no extra docs or Actuator surface.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: none
+
+logging:
+  level:
+    root: INFO
+    com.motion: INFO

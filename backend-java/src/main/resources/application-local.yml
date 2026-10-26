@@ -1,0 +1,10 @@
+# Local development defaults. Never put real secrets in this file.
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 1
+
+motion:
+  env: development
+  email:
+    dev-outbox: true
