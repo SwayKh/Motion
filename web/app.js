@@ -75,6 +75,7 @@
   const state = {
     videos: new Map(),
     jobs: new Map(),
+    latestJobIds: new Map(),
     selectedId: null,
     pipelines: new Map(),
     previewModes: new Map(),

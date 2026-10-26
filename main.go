@@ -45,7 +45,7 @@ func main() {
 	defer stop()
 
 	manager.Start(ctx)
-	go job.StartCleaner(videoStore, jobStore)
+	go job.StartCleaner(videoStore)
 
 	server := &http.Server{
 		Addr:              ":8080",
