@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"VideoProject/internal/logger"
 	"VideoProject/internal/media"
 	"VideoProject/internal/models"
+	"VideoProject/internal/validation"
 
 	"github.com/google/uuid"
 )
@@ -41,22 +43,56 @@ func NewVideoService(store *db.VideoStore) *VideoService {
 	}
 }
 
+type uploadErrorKind int
+
+const (
+	uploadErrorInvalid uploadErrorKind = iota
+	uploadErrorInternal
+)
+
+type uploadError struct {
+	kind    uploadErrorKind
+	message string
+	cause   error
+}
+
+func (e *uploadError) Error() string {
+	return e.message
+}
+
+func (e *uploadError) Unwrap() error {
+	return e.cause
+}
+
+func invalidUploadError(message string, cause error) error {
+	return &uploadError{kind: uploadErrorInvalid, message: message, cause: cause}
+}
+
+func internalUploadError(message string, cause error) error {
+	return &uploadError{kind: uploadErrorInternal, message: message, cause: cause}
+}
+
+func IsUploadClientError(err error) bool {
+	var uploadErr *uploadError
+	return errors.As(err, &uploadErr) && uploadErr.kind == uploadErrorInvalid
+}
+
 func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader) (*models.Video, error) {
 	defer file.Close()
 
 	originalName := filepath.Base(header.Filename)
 	ext := strings.ToLower(filepath.Ext(originalName))
 	if ext == "" {
-		return nil, fmt.Errorf("file must have a file extension")
+		return nil, invalidUploadError("file must have a file extension", nil)
 	}
 	if _, ok := allowedVideoExtensions[ext]; !ok {
-		return nil, fmt.Errorf(
+		return nil, invalidUploadError(fmt.Sprintf(
 			"unsupported file type %s; use MP4, MOV, MKV, WebM, AVI, M4V, MPEG, or 3GP",
 			ext,
-		)
+		), nil)
 	}
 	if header.Size > maxUploadBytes {
-		return nil, fmt.Errorf("file exceeds the 150 MB limit")
+		return nil, invalidUploadError("file exceeds the 150 MB limit", nil)
 	}
 
 	// Generate video ID
@@ -70,7 +106,7 @@ func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader)
 	dst, err := os.Create(uploadPath)
 	if err != nil {
 		logger.Error.Printf("creating upload file: %v", err)
-		return nil, fmt.Errorf("failed to save uploaded file")
+		return nil, internalUploadError("failed to save uploaded file", err)
 	}
 	defer dst.Close()
 
@@ -79,7 +115,7 @@ func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader)
 	if err != nil {
 		os.Remove(uploadPath)
 		logger.Error.Printf("copying upload file: %v", err)
-		return nil, fmt.Errorf("failed to save uploaded file")
+		return nil, internalUploadError("failed to save uploaded file", err)
 	}
 
 	// Probe metadata
@@ -87,29 +123,32 @@ func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader)
 	if err != nil {
 		os.Remove(uploadPath)
 		logger.Error.Printf("probing video metadata: %v", err)
-		return nil, fmt.Errorf("unable to read video metadata; the file may be unsupported or corrupt")
+		if ffmpeg.IsProbeUnavailableError(err) {
+			return nil, internalUploadError("media probing is unavailable", err)
+		}
+		return nil, invalidUploadError("unable to read video metadata; the file may be unsupported or corrupt", err)
 	}
 
 	meta, err := media.ExtractMetaData(raw)
 	if err != nil {
 		os.Remove(uploadPath)
 		logger.Error.Printf("extracting video metadata: %v", err)
-		return nil, fmt.Errorf("unable to read video metadata; the file may be unsupported or corrupt")
+		return nil, internalUploadError("failed to read video metadata", err)
 	}
 
 	if meta.Duration > 300 {
 		os.Remove(uploadPath)
-		return nil, fmt.Errorf("video exceeds the 5 minute limit")
+		return nil, invalidUploadError("video exceeds the 5 minute limit", nil)
 	}
 
 	if meta.Width > 0 && (meta.Width > 1920 || meta.Height > 1080) {
 		os.Remove(uploadPath)
-		return nil, fmt.Errorf("video exceeds the 1080p limit")
+		return nil, invalidUploadError("video exceeds the 1080p limit", nil)
 	}
 
 	if meta.Width == 0 {
 		os.Remove(uploadPath)
-		return nil, fmt.Errorf("file does not contain a video stream")
+		return nil, invalidUploadError("file does not contain a video stream", nil)
 	}
 
 	// Create model
@@ -133,7 +172,7 @@ func (s *VideoService) Upload(file multipart.File, header *multipart.FileHeader)
 	if err != nil {
 		os.Remove(uploadPath)
 		logger.Error.Printf("persisting uploaded video: %v", err)
-		return nil, fmt.Errorf("failed to save video record")
+		return nil, internalUploadError("failed to save video record", err)
 	}
 
 	return video, nil
@@ -177,17 +216,23 @@ func ProcessJob(
 		return result, fmt.Errorf("source file is no longer available")
 	}
 
-	if wantsAudio {
-		raw, err := ffmpeg.NewProcessor(job.SourcePath).GetMetadata()
-		if err == nil {
-			meta, err := media.ExtractMetaData(raw)
-			if err == nil && !meta.HasAudio {
-				return result, fmt.Errorf("this video has no audio track to extract")
-			}
-		}
+	raw, err := ffmpeg.NewProcessor(job.SourcePath).GetMetadata()
+	if err != nil {
+		logger.Error.Printf("job=%s probing source metadata: %v", job.ID, err)
+		return result, fmt.Errorf("unable to inspect the source video")
 	}
 
-	processor := ffmpeg.NewProcessor(job.SourcePath)
+	meta, err := media.ExtractMetaData(raw)
+	if err != nil {
+		logger.Error.Printf("job=%s extracting source metadata: %v", job.ID, err)
+		return result, fmt.Errorf("unable to inspect the source video")
+	}
+
+	if wantsAudio && !meta.HasAudio {
+		return result, fmt.Errorf("this video has no audio track to extract")
+	}
+
+	processor := ffmpeg.NewProcessorWithAudio(job.SourcePath, meta.HasAudio)
 
 	applied := 0
 	for _, op := range req.Operations {
@@ -202,8 +247,11 @@ func ProcessJob(
 			processor.Speed(op.Factor)
 			applied++
 		case "volume":
-			if op.Factor < 0 {
-				return result, fmt.Errorf("volume factor cannot be negative")
+			if err := validation.ValidateVolumeFactor(op.Factor); err != nil {
+				return result, err
+			}
+			if !meta.HasAudio {
+				return result, fmt.Errorf("this video has no audio track to adjust")
 			}
 			processor.Volume(op.Factor)
 			applied++
@@ -245,7 +293,7 @@ func ProcessJob(
 		}
 	})
 
-	err := processor.OutputContext(ctx, tempPath)
+	err = processor.OutputContext(ctx, tempPath)
 	if err != nil {
 		_ = os.Remove(tempPath)
 		if ctxErr := ctx.Err(); ctxErr != nil {
