@@ -1,4 +1,4 @@
-# Multi-stage build for CineCut
+# Multi-stage build for Motion
 FROM golang:1.26-bookworm AS builder
 
 WORKDIR /app
@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o cinecut .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o motion .
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -23,19 +23,19 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN groupadd -r cinecut && useradd -r -g cinecut -m -d /app cinecut
+RUN groupadd -r motion && useradd -r -g motion -m -d /app motion
 
 WORKDIR /app
 
 # Copy binary and static files
-COPY --from=builder /app/cinecut /app/cinecut
+COPY --from=builder /app/motion /app/motion
 COPY --from=builder /app/web /app/web
 
 # Create data directories
 RUN mkdir -p /app/data /app/uploads /app/outputs && \
-    chown -R cinecut:cinecut /app
+    chown -R motion:motion /app
 
-USER cinecut
+USER motion
 
 EXPOSE 8080
 
@@ -46,4 +46,4 @@ ENV SECURE_COOKIES=true
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-ENTRYPOINT ["/app/cinecut"]
+ENTRYPOINT ["/app/motion"]

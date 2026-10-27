@@ -1,9 +1,9 @@
 services:
-  cinecut:
+  motion:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: cinecut
+    container_name: motion
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -24,9 +24,9 @@ services:
       - SMTP_PASS=
       - SMTP_FROM=
     volumes:
-      - cinecut_data:/app/data
-      - cinecut_uploads:/app/uploads
-      - cinecut_outputs:/app/outputs
+      - motion_data:/app/data
+      - motion_uploads:/app/uploads
+      - motion_outputs:/app/outputs
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
@@ -35,6 +35,6 @@ services:
       start_period: 30s
 
 volumes:
-  cinecut_data:
-  cinecut_uploads:
-  cinecut_outputs:
+  motion_data:
+  motion_uploads:
+  motion_outputs:

@@ -40,7 +40,7 @@ testing*
 *.mp4
 *.mp3
 
-# CineCut runtime data
+# Motion runtime data
 uploads/
 outputs/
 data/

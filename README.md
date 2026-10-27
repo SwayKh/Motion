@@ -1,6 +1,6 @@
-# CineCut
+# Motion
 
-CineCut is a local, self-hosted video processing web application written in Go. It lets a user upload a video, build a short FFmpeg processing pipeline, run it as a persistent background job, follow progress, cancel work, and preview or download the result.
+Motion is a local, self-hosted video processing web application written in Go. It lets a user upload a video, build a short FFmpeg processing pipeline, run it as a persistent background job, follow progress, cancel work, and preview or download the result.
 
 The project is aimed at developers and hobbyists who want a small, readable example of combining Go, SQLite, FFmpeg, background workers, and a vanilla JavaScript frontend. It is currently a **single-user local tool**, not a production SaaS product.
 
@@ -54,7 +54,7 @@ The current code does **not** include authentication, user accounts, API keys, c
 No screenshots are committed to this repository yet. To add them, create image files under `docs/screenshots/` and replace this paragraph with Markdown image links such as:
 
 ```markdown
-![CineCut workspace](docs/screenshots/<screenshot-file>.png)
+![Motion workspace](docs/screenshots/<screenshot-file>.png)
 ```
 
 Suggested captures are the library and upload area, an active pipeline with progress, and a completed output. Do not use generated or mocked screenshots as documentation of real behavior.
@@ -463,7 +463,7 @@ For detailed troubleshooting and manual tests, see [docs/DEVELOPMENT.md](docs/DE
 - There is no `DELETE` endpoint, no account boundary, and no audit log.
 - The frontend escapes user-controlled strings before inserting them into HTML, but the application should still be placed behind authentication, TLS, and a firewall before any non-local exposure.
 
-Before exposing CineCut publicly, add authentication/authorization, restrict CORS, bind to loopback or a private interface, enforce upload/processing quotas and timeouts, isolate FFmpeg (container/user/limits), add request rate limiting, and serve over TLS.
+Before exposing Motion publicly, add authentication/authorization, restrict CORS, bind to loopback or a private interface, enforce upload/processing quotas and timeouts, isolate FFmpeg (container/user/limits), add request rate limiting, and serve over TLS.
 
 No license file is included in this repository; do not assume a license for redistribution.
 

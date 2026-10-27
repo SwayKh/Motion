@@ -1,4 +1,4 @@
-# CineCut API Reference
+# Motion API Reference
 
 Base URL for local development:
 
