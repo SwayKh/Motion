@@ -385,7 +385,30 @@ function apiFetch(url, options = {}) {
     els.operationsBody.addEventListener("change", handleOperationsChange);
 
     els.previewBody.addEventListener("click", handlePreviewClick);
-    els.jobBody.addEventListener("click", handleJobClick);
+    if (els.jobBody) {
+      els.jobBody.addEventListener("click", handleJobClick);
+    }
+    document.addEventListener("click", (event) => {
+      const jobPreview = event.target.closest("[data-job-preview]");
+      if (jobPreview) {
+        event.preventDefault();
+        event.stopPropagation();
+        const video = selectedVideo();
+        if (video) {
+          state.previewModes.set(video.id, jobPreview.dataset.jobPreview);
+          renderPreview(video);
+          try {
+            const preview = document.querySelector('.preview-panel');
+            if (preview) preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (e) {}
+        }
+        return;
+      }
+      const previewMode = event.target.closest("[data-preview-mode]");
+      if (previewMode) {
+        handlePreviewClick(event);
+      }
+    });
 
     setupDropzone();
 
@@ -462,11 +485,7 @@ function apiFetch(url, options = {}) {
 
       for (const video of state.videos.values()) {
         if (!state.pipelines.has(video.id)) {
-          const latest = latestJobFor(video.id);
-          if (latest && Array.isArray(latest.operations) && latest.operations.length > 0) {
-            const stored = latest.operations.map(normalizeStoredOperation).filter(Boolean);
-            if (stored.length > 0) state.pipelines.set(video.id, stored);
-          }
+          state.pipelines.set(video.id, []);
         }
       }
 
@@ -724,11 +743,11 @@ function apiFetch(url, options = {}) {
                 : "This upload has no video stream. It can be previewed as audio."
             }
           </p>
-          <audio controls preload="metadata" src="${source}"></audio>
+          <audio controls preload="metadata" crossorigin="use-credentials" src="${source}"></audio>
         </div>
       `;
     } else {
-      mediaMarkup = `<video controls playsinline preload="metadata" src="${source}"></video>`;
+      mediaMarkup = `<video controls playsinline preload="metadata" crossorigin="use-credentials" src="${source}"></video>`;
     }
 
     els.previewBody.innerHTML = `
@@ -779,6 +798,8 @@ function apiFetch(url, options = {}) {
 
     const modeButton = event.target.closest("[data-preview-mode]");
     if (modeButton && !modeButton.disabled) {
+      event.preventDefault();
+      event.stopPropagation();
       state.previewModes.set(video.id, modeButton.dataset.previewMode);
       renderPreview(video);
       return;
@@ -1675,7 +1696,7 @@ function apiFetch(url, options = {}) {
         const actions = [];
         if (canDownload) {
           actions.push(
-            `<a class="btn btn-small btn-secondary" href="${jobMediaURL(job.id, "output")}" target="_blank" rel="noopener">Preview output</a>`,
+            `<button class="btn btn-small btn-secondary" type="button" data-job-preview="output">Preview output</button>`,
           );
           actions.push(
             `<button class="btn btn-small" type="button" data-history-download="${escapeHTML(job.id)}">Download</button>`,
@@ -1749,8 +1770,16 @@ function apiFetch(url, options = {}) {
 
     const previewButton = event.target.closest("[data-job-preview]");
     if (previewButton) {
+      event.preventDefault();
+      event.stopPropagation();
       state.previewModes.set(video.id, previewButton.dataset.jobPreview);
       renderPreview(video);
+      // Also try to scroll to preview
+      try {
+        const preview = document.querySelector('.preview-panel');
+        if (preview) preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e) {}
+      return;
     }
   }
 
@@ -1767,7 +1796,7 @@ function apiFetch(url, options = {}) {
     let keepPolling = false;
 
     try {
-      const response = await fetch(`/videos/${encodeURIComponent(id)}`, {
+      const response = await apiFetch(`/videos/${encodeURIComponent(id)}`, {
         cache: "no-store",
       });
 
@@ -1803,12 +1832,10 @@ function apiFetch(url, options = {}) {
       }
 
       if (state.selectedId === id) {
-        if (!previous || previous.status !== updated.status) {
-          renderWorkspace();
-        } else {
-          renderOperations(updated);
-          renderJob(updated);
-        }
+        renderWorkspace();
+        const v = state.videos.get(id);
+        if (v) renderPreview(v);
+        renderJob(v);
       }
 
       renderLibrary();
@@ -1963,6 +1990,11 @@ function apiFetch(url, options = {}) {
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/upload");
+    xhr.withCredentials = true;
+    const csrfToken = typeof getCsrfToken === "function" ? getCsrfToken() : null;
+    if (csrfToken) {
+      xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+    }
 
     xhr.upload.addEventListener("progress", (event) => {
       if (!event.lengthComputable) return;
@@ -2042,7 +2074,7 @@ function apiFetch(url, options = {}) {
     if (!id) return;
 
     try {
-      const response = await fetch(`/jobs/${encodeURIComponent(id)}/cancel`, {
+      const response = await apiFetch(`/jobs/${encodeURIComponent(id)}/cancel`, {
         method: "POST",
         cache: "no-store",
       });
@@ -2080,7 +2112,7 @@ function apiFetch(url, options = {}) {
     }
 
     try {
-      const response = await fetch(jobMediaURL(id, "download"), {
+      const response = await apiFetch(jobMediaURL(id, "download"), {
         method: "HEAD",
         cache: "no-store",
       });
@@ -2107,7 +2139,7 @@ function apiFetch(url, options = {}) {
     }
 
     try {
-      const response = await fetch(mediaURL(id, "download"), {
+      const response = await apiFetch(mediaURL(id, "download"), {
         method: "HEAD",
         cache: "no-store",
       });
