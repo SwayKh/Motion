@@ -236,7 +236,7 @@ func doRequest(t *testing.T, method, url, body, contentType string) (*http.Respo
 			if cookies := globalTestClient.Jar.Cookies(request.URL); len(cookies) > 0 {
 				for _, c := range cookies {
 					request.AddCookie(c)
-					if c.Name == "cinecut_csrf" && (method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions) {
+					if c.Name == "motion_csrf" && (method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions) {
 						request.Header.Set("X-CSRF-Token", c.Value)
 					}
 				}
@@ -287,7 +287,7 @@ func postMultipart(t *testing.T, url, field, filename string, content []byte) (*
 			if cookies := globalTestClient.Jar.Cookies(request.URL); len(cookies) > 0 {
 				for _, c := range cookies {
 					request.AddCookie(c)
-					if c.Name == "cinecut_csrf" {
+					if c.Name == "motion_csrf" {
 						request.Header.Set("X-CSRF-Token", c.Value)
 					}
 				}

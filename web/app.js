@@ -1,5 +1,5 @@
 function getCsrfToken() {
-  const match = document.cookie.match(/(?:^|; )cinecut_csrf=([^;]+)/);
+  const match = document.cookie.match(/(?:^|; )motion_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 }
 
@@ -24,7 +24,7 @@ function apiFetch(url, options = {}) {
   const MAX_SPEED = 2.0;
   const MAX_UPLOAD_BYTES = 150 * 1024 * 1024;
   const ACTIVE_STATUSES = new Set(["queued", "processing", "cancel_requested"]);
-  const SELECTION_KEY = "cinecut:selected-video";
+  const SELECTION_KEY = "motion:selected-video";
 
   const ALLOWED_EXTENSIONS = new Set([
     ".mp4",

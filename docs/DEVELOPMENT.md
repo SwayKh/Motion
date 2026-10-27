@@ -31,8 +31,8 @@ Open `http://localhost:8080`. The process creates the runtime directories and da
 Alternative binary build:
 
 ```bash
-go build -o cinecut .
-./cinecut
+go build -o motion .
+./motion
 ```
 
 All paths are relative to the working directory. If you build elsewhere, either run the binary from the repository root or copy the `web/` directory and expect `uploads/`, `outputs/`, and `data/` to be created beside the working directory.

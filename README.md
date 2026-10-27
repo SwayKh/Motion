@@ -31,7 +31,7 @@ The project is aimed at developers and hobbyists who want a small, readable exam
 - Process panel with progress, error details, cancellation, output preview, and download.
 - Per-video job history with preview/download/cancel actions.
 - Polling every 1.4 seconds while a job is active.
-- Selected video remembered in `localStorage` under `cinecut:selected-video`.
+- Selected video remembered in `localStorage` under `motion:selected-video`.
 
 ### Upload limits and formats
 
@@ -204,8 +204,8 @@ http://localhost:8080
 Optional standalone build:
 
 ```bash
-go build -o cinecut .
-./cinecut
+go build -o motion .
+./motion
 ```
 
 Run the test suite:
@@ -495,9 +495,9 @@ These are potential improvements, **not implemented features**:
 
 
 ### Volumes
-- `cinecut_data` persists `data/` (SQLite database)
-- `cinecut_uploads` persists `uploads/` (original files)
-- `cinecut_outputs` persists `outputs/` (processed files)
+- `motion_data` persists `data/` (SQLite database)
+- `motion_uploads` persists `uploads/` (original files)
+- `motion_outputs` persists `outputs/` (processed files)
 
 ### Configuration
 Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options.
@@ -509,7 +509,7 @@ The container has a health check against `GET /health`.
 Run behind a reverse proxy and terminate TLS. Set `SECURE_COOKIES=true` in production when using HTTPS.
 
 ### Backup
-Backup volumes: `cinecut_data`, `cinecut_uploads`, `cinecut_outputs`.
+Backup volumes: `motion_data`, `motion_uploads`, `motion_outputs`.
 
 ### Upgrade
 Pull new code, rebuild image, restart containers. Migrations run on startup.
@@ -523,9 +523,9 @@ docker compose up --build -d
 ```
 
 ### Volumes
-- `cinecut_data` persists `data/` (SQLite database)
-- `cinecut_uploads` persists `uploads/` (original files)
-- `cinecut_outputs` persists `outputs/` (processed files)
+- `motion_data` persists `data/` (SQLite database)
+- `motion_uploads` persists `uploads/` (original files)
+- `motion_outputs` persists `outputs/` (processed files)
 
 ### Configuration
 Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options.
@@ -537,7 +537,7 @@ The container has a health check against `GET /health`.
 Run behind a reverse proxy and terminate TLS. Set `SECURE_COOKIES=true` in production when using HTTPS.
 
 ### Backup
-Backup volumes: `cinecut_data`, `cinecut_uploads`, `cinecut_outputs`.
+Backup volumes: `motion_data`, `motion_uploads`, `motion_outputs`.
 
 ### Upgrade
 Pull new code, rebuild image, restart containers. Migrations run on startup.

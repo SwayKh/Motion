@@ -1,5 +1,5 @@
 function getCsrfToken() {
-  const match = document.cookie.match(/(?:^|; )cinecut_csrf=([^;]+)/);
+  const match = document.cookie.match(/(?:^|; )motion_csrf=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : "";
 }
 

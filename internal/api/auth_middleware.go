@@ -9,7 +9,7 @@ import (
 	"github.com/SwayKh/Motion/internal/db"
 )
 
-const sessionCookieName = "cinecut_session"
+const sessionCookieName = "motion_session"
 
 func AuthMiddleware(database *sql.DB) func(http.Handler) http.Handler {
 	userStore := db.NewUserStore(database)

@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-const csrfCookieName = "cinecut_csrf"
+const csrfCookieName = "motion_csrf"
 const csrfHeaderName = "X-CSRF-Token"
 
 func ensureCSRFToken(w http.ResponseWriter, secure bool) string {
