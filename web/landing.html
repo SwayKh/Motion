@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="CineCut - Browser-based video editor powered by FFmpeg" />
+    <title>CineCut - Browser-based Video Editor</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="3" y="7" width="26" height="18" rx="3" stroke="currentColor" stroke-width="1.6" />
+            <path d="M12 12.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <span class="brand-name">CINE<span>CUT</span></span>
+          <span class="brand-sub">Video processing studio</span>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn btn-ghost" href="/login.html">Log in</a>
+        <a class="btn btn-choose" href="/register.html">Get started</a>
+      </div>
+    </header>
+    <main class="app" style="grid-template-columns: 1fr;">
+      <section class="workspace" style="margin: 0 auto; max-width: 1100px; width: 100%;">
+        <div class="workspace-content" style="display: block;">
+          <header class="workspace-head">
+            <h1>CineCut — Browser-based video processing with FFmpeg</h1>
+            <p>Upload, trim, adjust speed and volume, flip, or extract audio directly in your browser.</p>
+          </header>
+          <div class="workspace-body">
+            <section class="panel preview-panel" aria-label="Hero">
+              <div style="padding: 24px;">
+                <h2 style="margin-top: 0;">Edit videos without leaving your browser</h2>
+                <p>CineCut provides a browser-based interface for uploading and processing video using FFmpeg. Build a processing pipeline, track jobs with live progress, preview and download results.</p>
+                <div style="margin-top: 16px;">
+                  <a class="btn btn-choose" href="/register.html">Get started</a>
+                  <a class="btn btn-ghost" href="/login.html">Log in</a>
+                </div>
+              </div>
+            </section>
+            <section class="panel editor-panel" aria-label="Features">
+              <div style="padding: 24px;">
+                <h2 style="margin-top: 0;">Features</h2>
+                <ul>
+                  <li>Video trimming</li>
+                  <li>Speed adjustment</li>
+                  <li>Volume adjustment</li>
+                  <li>Horizontal/vertical flipping</li>
+                  <li>Audio extraction (to_audio)</li>
+                  <li>Processing progress and job tracking</li>
+                  <li>Preview and download outputs</li>
+                </ul>
+              </div>
+            </section>
+            <section class="panel process-panel" aria-label="How it works">
+              <div style="padding: 24px;">
+                <h2 style="margin-top: 0;">How it works</h2>
+                <ol>
+                  <li>Upload a supported media file</li>
+                  <li>Choose the processing operation and parameters</li>
+                  <li>Process, preview, and download the result</li>
+                </ol>
+                <div style="margin-top: 16px;">
+                  <a class="btn btn-choose" href="/register.html">Sign up to start</a>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer style="padding: 24px; text-align: center; color: var(--text-subtle);">
+      <small>© CineCut</small>
+    </footer>
+  </body>
+</html>

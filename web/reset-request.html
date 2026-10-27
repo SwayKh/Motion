@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reset password - CineCut</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="3" y="7" width="26" height="18" rx="3" stroke="currentColor" stroke-width="1.6" />
+            <path d="M12 12.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <a href="/landing.html" style="text-decoration: none; color: inherit;"><span class="brand-name">CINE<span>CUT</span></span></a>
+        </div>
+      </div>
+    </header>
+    <main class="app" style="grid-template-columns: 1fr;">
+      <section class="workspace" style="margin: 0 auto; max-width: 480px; width: 100%;">
+        <div class="workspace-content" style="display: block;">
+          <header class="workspace-head">
+            <h1>Reset password</h1>
+            <p>We'll send a reset link if the account exists</p>
+          </header>
+          <div class="panel" style="padding: 24px;">
+            <form id="resetReqForm" novalidate>
+              <div style="margin-bottom: 12px;">
+                <label for="email">Email</label><br/>
+                <input id="email" name="email" type="email" required style="width: 100%; padding: 8px;" />
+              </div>
+              <div id="msg" style="margin-bottom: 12px;"></div>
+              <button class="btn btn-choose" type="submit">Request reset</button>
+              <p style="margin-top: 12px;"><a href="/login.html">Back to login</a></p>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/auth.js"></script>
+  </body>
+</html>

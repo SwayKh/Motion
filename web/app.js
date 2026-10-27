@@ -1,3 +1,21 @@
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )cinecut_csrf=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+function apiFetch(url, options = {}) {
+  options.credentials = options.credentials || "include";
+  options.headers = options.headers || {};
+  const method = (options.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+    const csrf = getCsrfToken();
+    if (csrf) {
+      options.headers["X-CSRF-Token"] = csrf;
+    }
+  }
+  return fetch(url, options);
+}
+
 (() => {
   "use strict";
 
@@ -402,7 +420,7 @@
 
   async function checkHealth() {
     try {
-      const response = await fetch("/health", { cache: "no-store" });
+      const response = await apiFetch("/health", { cache: "no-store" });
       if (!response.ok) throw new Error("unhealthy");
       setBackend("online");
       return true;
@@ -416,7 +434,7 @@
     clearLibraryError();
 
     try {
-      const response = await fetch("/videos", { cache: "no-store" });
+      const response = await apiFetch("/videos", { cache: "no-store" });
       if (!response.ok) {
         throw new Error(await readError(response));
       }
@@ -494,7 +512,7 @@
 
   async function loadJobs() {
     try {
-      const response = await fetch("/jobs", { cache: "no-store" });
+      const response = await apiFetch("/jobs", { cache: "no-store" });
       if (!response.ok) throw new Error(await readError(response));
 
       const payload = await response.json();
@@ -518,7 +536,7 @@
 
   async function refreshJobsForVideo(id) {
     try {
-      const response = await fetch(`/jobs?videoId=${encodeURIComponent(id)}`, {
+      const response = await apiFetch(`/jobs?videoId=${encodeURIComponent(id)}`, {
         cache: "no-store",
       });
       if (!response.ok) throw new Error(await readError(response));
@@ -1427,7 +1445,7 @@
     updatePipelineValidation(video);
 
     try {
-      const response = await fetch(`/videos/${encodeURIComponent(video.id)}/process`, {
+      const response = await apiFetch(`/videos/${encodeURIComponent(video.id)}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ operations: buildOperationsPayload(video) }),

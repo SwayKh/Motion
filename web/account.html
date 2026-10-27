@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account - CineCut</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <rect x="3" y="7" width="26" height="18" rx="3" stroke="currentColor" stroke-width="1.6" />
+            <path d="M12 12.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <a href="/app.html" style="text-decoration: none; color: inherit;"><span class="brand-name">CINE<span>CUT</span></span></a>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn btn-ghost" href="/app.html">Editor</a>
+        <button class="btn btn-ghost" id="logoutBtn">Logout</button>
+      </div>
+    </header>
+    <main class="app" style="grid-template-columns: 1fr;">
+      <section class="workspace" style="margin: 0 auto; max-width: 640px; width: 100%;">
+        <div class="workspace-content" style="display: block;">
+          <header class="workspace-head">
+            <h1>Account settings</h1>
+            <p id="userEmail">-</p>
+          </header>
+          <div class="panel" style="padding: 24px; margin-bottom: 16px;">
+            <h2 style="margin-top: 0;">Change password</h2>
+            <form id="changePassForm" novalidate>
+              <div style="margin-bottom: 12px;">
+                <label for="currentPassword">Current password</label><br/>
+                <input id="currentPassword" name="currentPassword" type="password" required style="width: 100%; padding: 8px;" />
+              </div>
+              <div style="margin-bottom: 12px;">
+                <label for="newPassword">New password</label><br/>
+                <input id="newPassword" name="newPassword" type="password" required minlength="8" style="width: 100%; padding: 8px;" />
+                <small>Minimum 8 characters, at least one letter and one digit</small>
+              </div>
+              <div style="margin-bottom: 12px;">
+                <label for="newPasswordConfirm">Confirm new password</label><br/>
+                <input id="newPasswordConfirm" name="newPasswordConfirm" type="password" required style="width: 100%; padding: 8px;" />
+              </div>
+              <div id="passMsg" style="margin-bottom: 12px;"></div>
+              <button class="btn btn-choose" type="submit">Change password</button>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="/auth.js"></script>
+  </body>
+</html>
