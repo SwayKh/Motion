@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -47,14 +48,21 @@ func main() {
 	manager.Start(ctx)
 	go job.StartCleaner(videoStore)
 
+	port := ":8080"
+	if p := os.Getenv("PORT"); p != "" {
+		if strings.HasPrefix(p, ":") {
+			port = p
+		} else {
+			port = ":" + p
+		}
+	}
 	server := &http.Server{
-		Addr:              ":8080",
+		Addr:              port,
 		Handler:           api.NewRouter(database, manager, "./web"),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	logger.Info.Println("Starting server on port 8080...")
-	logger.Info.Println("Open http://localhost:8080 in your browser")
+	logger.Info.Printf("Starting server on %s...", port)
 
 	serverErr := make(chan error, 1)
 	go func() {

@@ -15,11 +15,23 @@ var (
 )
 
 type SessionStore struct {
-	db *sql.DB
+	db          *sql.DB
+	idleTTL     time.Duration
+	absoluteTTL time.Duration
 }
 
 func NewSessionStore(db *sql.DB) *SessionStore {
-	return &SessionStore{db: db}
+	return &SessionStore{db: db, idleTTL: 2 * time.Hour, absoluteTTL: 24 * time.Hour}
+}
+
+func NewSessionStoreWithConfig(db *sql.DB, idleTTL, absoluteTTL time.Duration) *SessionStore {
+	if idleTTL <= 0 {
+		idleTTL = 2 * time.Hour
+	}
+	if absoluteTTL <= 0 {
+		absoluteTTL = 24 * time.Hour
+	}
+	return &SessionStore{db: db, idleTTL: idleTTL, absoluteTTL: absoluteTTL}
 }
 
 func (s *SessionStore) Create(sess *models.Session) error {
@@ -53,15 +65,18 @@ func (s *SessionStore) GetValidByTokenHash(tokenHash string) (*models.Session, e
 	if now.After(sess.ExpiresAt) {
 		return nil, ErrSessionExpired
 	}
-	// Enforce idle timeout if last activity is too old (2 hours by default behavior)
+	// Enforce idle timeout
+	idleTTL := s.idleTTL
+	if idleTTL <= 0 {
+		idleTTL = 2 * time.Hour
+	}
 	if lastAct.Valid {
-		if now.Sub(lastAct.Time) > 2*time.Hour {
+		if now.Sub(lastAct.Time) > idleTTL {
 			return nil, ErrSessionExpired
 		}
 		sess.LastActivityAt = &lastAct.Time
 	} else {
-		// If never touched, consider against created time
-		if now.Sub(createdAt) > 2*time.Hour {
+		if now.Sub(createdAt) > idleTTL {
 			return nil, ErrSessionExpired
 		}
 	}

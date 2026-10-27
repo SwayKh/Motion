@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -32,7 +34,7 @@ func Load() *Config {
 		SessionTTL:        getDuration("SESSION_TTL", 24*time.Hour),
 		SessionIdleTTL:    getDuration("SESSION_IDLE_TTL", 2*time.Hour),
 		SecureCookies:     getBool("SECURE_COOKIES", strings.EqualFold(getEnv("APP_ENV", "development"), "production")),
-		TrustedOrigins:    split(getEnv("TRUSTED_ORIGINS", "")),
+		TrustedOrigins:    normalizeOrigins(split(getEnv("TRUSTED_ORIGINS", ""))),
 		RateLimitLogin:    getInt("RATE_LIMIT_LOGIN", 10),
 		RateLimitRegister: getInt("RATE_LIMIT_REGISTER", 5),
 		RateLimitReset:    getInt("RATE_LIMIT_RESET", 3),
@@ -43,7 +45,26 @@ func Load() *Config {
 		SMTPFrom:          getEnv("SMTP_FROM", ""),
 		BaseURL:           getEnv("BASE_URL", "http://localhost:8080"),
 	}
+	if err := cfg.Validate(); err != nil {
+		panic(err)
+	}
 	return cfg
+}
+
+func (c *Config) Validate() error {
+	if c.SessionTTL <= 0 {
+		return fmt.Errorf("invalid SESSION_TTL")
+	}
+	if c.SessionIdleTTL <= 0 {
+		return fmt.Errorf("invalid SESSION_IDLE_TTL")
+	}
+	if c.SessionIdleTTL > c.SessionTTL && c.SessionTTL > 0 {
+		// allow but keep consistent
+	}
+	if c.RateLimitLogin < 0 || c.RateLimitRegister < 0 || c.RateLimitReset < 0 {
+		return fmt.Errorf("invalid rate limit")
+	}
+	return nil
 }
 
 func getEnv(key, def string) string {
@@ -78,8 +99,12 @@ func getBool(key string, def bool) bool {
 func getDuration(key string, def time.Duration) time.Duration {
 	if v := os.Getenv(key); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
+			if d <= 0 {
+				return def
+			}
 			return d
 		}
+		// invalid format - fall back to default for safety
 	}
 	return def
 }
@@ -95,6 +120,26 @@ func split(s string) []string {
 		if p != "" {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+func normalizeOrigins(origins []string) []string {
+	var out []string
+	for _, o := range origins {
+		o = strings.TrimSpace(o)
+		if o == "" {
+			continue
+		}
+		if !strings.Contains(o, "://") {
+			continue // reject malformed
+		}
+		u, err := url.Parse(o)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			continue
+		}
+		// only scheme+host
+		out = append(out, u.Scheme+"://"+u.Host)
 	}
 	return out
 }

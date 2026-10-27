@@ -1,6 +1,7 @@
 package api
 
 import (
+	"VideoProject/internal/config"
 	"database/sql"
 	"net/http"
 
@@ -12,7 +13,8 @@ const sessionCookieName = "cinecut_session"
 
 func AuthMiddleware(database *sql.DB) func(http.Handler) http.Handler {
 	userStore := db.NewUserStore(database)
-	sessionStore := db.NewSessionStore(database)
+	cfg := config.Load()
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +53,8 @@ func AuthMiddleware(database *sql.DB) func(http.Handler) http.Handler {
 
 func OptionalAuthMiddleware(database *sql.DB) func(http.Handler) http.Handler {
 	userStore := db.NewUserStore(database)
-	sessionStore := db.NewSessionStore(database)
+	cfg := config.Load()
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -93,7 +93,7 @@ func NewRouterWithConfig(database *sql.DB, manager *job.Manager, staticDir strin
 	handler = CSRFMiddleware(cfg.SecureCookies)(handler)
 	handler = optAuthMw(handler) // make user available if logged in
 	handler = SecurityHeaders(handler)
-	handler = CORS(handler)
+	handler = newCORSMiddleware(cfg)(handler)
 
 	if staticDir != "" {
 		// Serve landing page at root for unauthenticated? Or serve app - requirement says public landing page

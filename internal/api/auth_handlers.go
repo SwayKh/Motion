@@ -43,7 +43,7 @@ func clearSessionCookie(w http.ResponseWriter, secure bool) {
 
 func RegisterHandler(database *sql.DB, cfg *config.Config, regLimiter *rate.Limiter) http.HandlerFunc {
 	userStore := db.NewUserStore(database)
-	sessionStore := db.NewSessionStore(database)
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if regLimiter != nil {
@@ -138,7 +138,7 @@ func RegisterHandler(database *sql.DB, cfg *config.Config, regLimiter *rate.Limi
 
 func LoginHandler(database *sql.DB, cfg *config.Config, loginLimiter *rate.Limiter) http.HandlerFunc {
 	userStore := db.NewUserStore(database)
-	sessionStore := db.NewSessionStore(database)
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		if loginLimiter != nil {
@@ -204,7 +204,7 @@ func LoginHandler(database *sql.DB, cfg *config.Config, loginLimiter *rate.Limit
 }
 
 func LogoutHandler(database *sql.DB, cfg *config.Config) http.HandlerFunc {
-	sessionStore := db.NewSessionStore(database)
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(sessionCookieName)
@@ -240,7 +240,7 @@ func MeHandler(database *sql.DB) http.HandlerFunc {
 
 func ChangePasswordHandler(database *sql.DB, cfg *config.Config) http.HandlerFunc {
 	userStore := db.NewUserStore(database)
-	sessionStore := db.NewSessionStore(database)
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := getUser(r)
@@ -336,7 +336,7 @@ func RequestPasswordResetHandler(database *sql.DB, cfg *config.Config, resetLimi
 func ResetPasswordHandler(database *sql.DB, cfg *config.Config) http.HandlerFunc {
 	userStore := db.NewUserStore(database)
 	resetStore := db.NewResetTokenStore(database)
-	sessionStore := db.NewSessionStore(database)
+	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxProcessBodySize)
