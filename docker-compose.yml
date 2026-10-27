@@ -1,0 +1,40 @@
+services:
+  cinecut:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cinecut
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - APP_ENV=production
+      - SESSION_TTL=24h
+      - SESSION_IDLE_TTL=2h
+      - SECURE_COOKIES=true
+      - TRUSTED_ORIGINS=
+      - RATE_LIMIT_LOGIN=10
+      - RATE_LIMIT_REGISTER=5
+      - RATE_LIMIT_RESET=3
+      - BASE_URL=http://localhost:8080
+      - SMTP_HOST=
+      - SMTP_PORT=587
+      - SMTP_USER=
+      - SMTP_PASS=
+      - SMTP_FROM=
+    volumes:
+      - cinecut_data:/app/data
+      - cinecut_uploads:/app/uploads
+      - cinecut_outputs:/app/outputs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  cinecut_data:
+  cinecut_uploads:
+  cinecut_outputs:
