@@ -60,3 +60,10 @@ data/
 
 # Node
 node_modules/
+
+# Binaries
+VideoProject
+*.exe
+# Backups
+*.bak
+web/*.bak
