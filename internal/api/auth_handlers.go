@@ -334,9 +334,7 @@ func RequestPasswordResetHandler(database *sql.DB, cfg *config.Config, resetLimi
 }
 
 func ResetPasswordHandler(database *sql.DB, cfg *config.Config) http.HandlerFunc {
-	userStore := db.NewUserStore(database)
 	resetStore := db.NewResetTokenStore(database)
-	sessionStore := db.NewSessionStoreWithConfig(database, cfg.SessionIdleTTL, cfg.SessionTTL)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxProcessBodySize)
@@ -357,7 +355,9 @@ func ResetPasswordHandler(database *sql.DB, cfg *config.Config) http.HandlerFunc
 			writeError(w, http.StatusBadRequest, "invalid token")
 			return
 		}
-		reset, err := resetStore.GetValidByTokenHash(auth.HashToken(req.Token))
+		tokenHash := auth.HashToken(req.Token)
+		// Find token to get userID
+		reset, err := resetStore.GetValidByTokenHash(tokenHash)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid or expired token")
 			return
@@ -367,12 +367,10 @@ func ResetPasswordHandler(database *sql.DB, cfg *config.Config) http.HandlerFunc
 			writeError(w, http.StatusBadRequest, "password does not meet policy requirements (minimum 8 characters, at least one letter and one digit)")
 			return
 		}
-		if err := userStore.UpdatePassword(reset.UserID, hash); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to reset password")
+		if err := resetStore.ConsumeTokenAndResetPassword(reset.UserID, tokenHash, hash); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid or expired token")
 			return
 		}
-		_ = resetStore.MarkUsed(reset.ID)
-		_ = sessionStore.RevokeAllForUser(reset.UserID)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
