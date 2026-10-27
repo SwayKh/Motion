@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"VideoProject/internal/config"
+	"github.com/SwayKh/Motion/internal/config"
 )
 
 func newCORSMiddleware(cfg *config.Config) func(http.Handler) http.Handler {

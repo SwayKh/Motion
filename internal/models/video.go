@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"VideoProject/internal/ffmpeg"
+	"github.com/SwayKh/Motion/internal/ffmpeg"
 )
 
 const (

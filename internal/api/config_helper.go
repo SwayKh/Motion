@@ -1,6 +1,6 @@
 package api
 
-import "VideoProject/internal/config"
+import "github.com/SwayKh/Motion/internal/config"
 
 func GetConfig() *config.Config {
 	return config.Load()

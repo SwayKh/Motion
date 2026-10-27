@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	"VideoProject/internal/config"
-	"VideoProject/internal/email"
-	"VideoProject/internal/job"
-	"VideoProject/internal/rate"
+	"github.com/SwayKh/Motion/internal/config"
+	"github.com/SwayKh/Motion/internal/email"
+	"github.com/SwayKh/Motion/internal/job"
+	"github.com/SwayKh/Motion/internal/rate"
 )
 
 // NewRouter registers the API and optionally serves the static frontend from

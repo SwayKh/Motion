@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"VideoProject/internal/media"
+	"github.com/SwayKh/Motion/internal/media"
 
 	ffmpeg_go "github.com/u2takey/ffmpeg-go"
 )

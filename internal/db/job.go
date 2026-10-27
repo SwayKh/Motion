@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/models"
 
 	"github.com/google/uuid"
 )

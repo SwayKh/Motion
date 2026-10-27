@@ -1,4 +1,4 @@
-module VideoProject
+module github.com/SwayKh/Motion
 
 go 1.26.2
 

@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"VideoProject/internal/db"
-	"VideoProject/internal/job"
-	"VideoProject/internal/logger"
-	"VideoProject/internal/models"
-	"VideoProject/internal/service"
-	"VideoProject/internal/validation"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/job"
+	"github.com/SwayKh/Motion/internal/logger"
+	"github.com/SwayKh/Motion/internal/models"
+	"github.com/SwayKh/Motion/internal/service"
+	"github.com/SwayKh/Motion/internal/validation"
 )
 
 const (

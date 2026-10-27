@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"VideoProject/internal/ffmpeg"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/ffmpeg"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 func TestValidateProcessRequestAcceptsSupportedOperations(t *testing.T) {

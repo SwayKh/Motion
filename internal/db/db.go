@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"VideoProject/internal/logger"
+	"github.com/SwayKh/Motion/internal/logger"
 
 	_ "modernc.org/sqlite"
 )

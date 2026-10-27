@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"VideoProject/internal/auth"
-	"VideoProject/internal/config"
-	"VideoProject/internal/db"
-	"VideoProject/internal/email"
-	"VideoProject/internal/models"
-	"VideoProject/internal/rate"
+	"github.com/SwayKh/Motion/internal/auth"
+	"github.com/SwayKh/Motion/internal/config"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/email"
+	"github.com/SwayKh/Motion/internal/models"
+	"github.com/SwayKh/Motion/internal/rate"
 
 	"github.com/google/uuid"
 )

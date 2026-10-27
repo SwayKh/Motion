@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"VideoProject/internal/logger"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/logger"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 // videoResponse is the public representation of a video. Filesystem paths are

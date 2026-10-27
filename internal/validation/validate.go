@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"VideoProject/internal/ffmpeg"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/ffmpeg"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 const (

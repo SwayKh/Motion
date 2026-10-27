@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"VideoProject/internal/db"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 type cleanupTestEnv struct {

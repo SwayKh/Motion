@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"VideoProject/internal/db"
-	"VideoProject/internal/ffmpeg"
-	"VideoProject/internal/logger"
-	"VideoProject/internal/media"
-	"VideoProject/internal/models"
-	"VideoProject/internal/validation"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/ffmpeg"
+	"github.com/SwayKh/Motion/internal/logger"
+	"github.com/SwayKh/Motion/internal/media"
+	"github.com/SwayKh/Motion/internal/models"
+	"github.com/SwayKh/Motion/internal/validation"
 
 	"github.com/google/uuid"
 )

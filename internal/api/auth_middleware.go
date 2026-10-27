@@ -1,12 +1,12 @@
 package api
 
 import (
-	"VideoProject/internal/config"
 	"database/sql"
+	"github.com/SwayKh/Motion/internal/config"
 	"net/http"
 
-	"VideoProject/internal/auth"
-	"VideoProject/internal/db"
+	"github.com/SwayKh/Motion/internal/auth"
+	"github.com/SwayKh/Motion/internal/db"
 )
 
 const sessionCookieName = "cinecut_session"

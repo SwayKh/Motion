@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 func generateVolumeTestSource(t *testing.T) string {

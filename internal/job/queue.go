@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"VideoProject/internal/db"
-	"VideoProject/internal/logger"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/logger"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 type Manager struct {

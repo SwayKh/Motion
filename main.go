@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"VideoProject/internal/api"
-	"VideoProject/internal/db"
-	"VideoProject/internal/job"
-	"VideoProject/internal/logger"
+	"github.com/SwayKh/Motion/internal/api"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/job"
+	"github.com/SwayKh/Motion/internal/logger"
 )
 
 func main() {

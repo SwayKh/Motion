@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"VideoProject/internal/logger"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/logger"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 type Video struct {

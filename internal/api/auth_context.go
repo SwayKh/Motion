@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 type contextKey string

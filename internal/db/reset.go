@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/models"
 )
 
 var (

@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"VideoProject/internal/db"
-	"VideoProject/internal/ffmpeg"
-	"VideoProject/internal/job"
-	"VideoProject/internal/logger"
-	"VideoProject/internal/models"
+	"github.com/SwayKh/Motion/internal/db"
+	"github.com/SwayKh/Motion/internal/ffmpeg"
+	"github.com/SwayKh/Motion/internal/job"
+	"github.com/SwayKh/Motion/internal/logger"
+	"github.com/SwayKh/Motion/internal/models"
 
 	"github.com/google/uuid"
 )
