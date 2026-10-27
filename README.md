@@ -488,3 +488,56 @@ These are potential improvements, **not implemented features**:
 - [Architecture and lifecycle](docs/ARCHITECTURE.md)
 - [Development, testing, and troubleshooting](docs/DEVELOPMENT.md)
 - [Screenshot placeholder](docs/screenshots/README.md)
+
+## Docker Deployment
+
+### Build and run with Docker Compose
+
+
+### Volumes
+- `cinecut_data` persists `data/` (SQLite database)
+- `cinecut_uploads` persists `uploads/` (original files)
+- `cinecut_outputs` persists `outputs/` (processed files)
+
+### Configuration
+Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options.
+
+### Health check
+The container has a health check against `GET /health`.
+
+### Reverse proxy & HTTPS
+Run behind a reverse proxy and terminate TLS. Set `SECURE_COOKIES=true` in production when using HTTPS.
+
+### Backup
+Backup volumes: `cinecut_data`, `cinecut_uploads`, `cinecut_outputs`.
+
+### Upgrade
+Pull new code, rebuild image, restart containers. Migrations run on startup.
+
+
+## Docker Deployment
+
+### Build and run with Docker Compose
+```bash
+docker compose up --build -d
+```
+
+### Volumes
+- `cinecut_data` persists `data/` (SQLite database)
+- `cinecut_uploads` persists `uploads/` (original files)
+- `cinecut_outputs` persists `outputs/` (processed files)
+
+### Configuration
+Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options.
+
+### Health check
+The container has a health check against `GET /health`.
+
+### Reverse proxy & HTTPS
+Run behind a reverse proxy and terminate TLS. Set `SECURE_COOKIES=true` in production when using HTTPS.
+
+### Backup
+Backup volumes: `cinecut_data`, `cinecut_uploads`, `cinecut_outputs`.
+
+### Upgrade
+Pull new code, rebuild image, restart containers. Migrations run on startup.
