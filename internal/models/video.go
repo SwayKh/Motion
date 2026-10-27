@@ -35,7 +35,8 @@ func IsTerminalJobStatus(status string) bool {
 }
 
 type Video struct {
-	ID string
+	ID     string
+	UserID *string
 
 	OriginalPath string
 	OriginalName string

@@ -56,6 +56,8 @@ func setup(db *sql.DB) error {
 	migrations := []migration{
 		{version: 1, apply: migrateVideos},
 		{version: 2, apply: migrateJobs},
+		{version: 3, apply: migrateAuth},
+		{version: 4, apply: migrateOwnership},
 	}
 
 	for _, migration := range migrations {

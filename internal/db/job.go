@@ -29,6 +29,7 @@ func NewJobStore(db *sql.DB) *JobStore {
 const jobColumns = `
 	id,
 	video_id,
+	user_id,
 	COALESCE(video_name, ''),
 	source_path,
 	operations,
@@ -45,6 +46,7 @@ const jobColumns = `
 func scanJob(row rowScanner) (*models.Job, error) {
 	var (
 		job               models.Job
+		userID            sql.NullString
 		startedAt         sql.NullTime
 		finishedAt        sql.NullTime
 		cancelRequestedAt sql.NullTime
@@ -53,6 +55,7 @@ func scanJob(row rowScanner) (*models.Job, error) {
 	err := row.Scan(
 		&job.ID,
 		&job.VideoID,
+		&userID,
 		&job.VideoName,
 		&job.SourcePath,
 		&job.Operations,
@@ -65,6 +68,11 @@ func scanJob(row rowScanner) (*models.Job, error) {
 		&finishedAt,
 		&cancelRequestedAt,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// Store user_id in a way accessible? models.Job doesn't have UserID field; we'll handle via video ownership
+	_ = userID
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +133,13 @@ func (s *JobStore) CreateQueued(videoID, operations string) (*models.Job, error)
 	}
 
 	jobID := uuid.NewString()
+	var userID sql.NullString
+	_ = tx.QueryRow(`SELECT user_id FROM videos WHERE id = ?`, videoID).Scan(&userID)
 	_, err = tx.Exec(`
 		INSERT INTO jobs (
 			id,
 			video_id,
+			user_id,
 			video_name,
 			source_path,
 			operations,
@@ -136,10 +147,11 @@ func (s *JobStore) CreateQueued(videoID, operations string) (*models.Job, error)
 			progress,
 			created_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, 0, STRFTIME('%Y-%m-%d %H:%M:%f', 'now'))
+		VALUES (?, ?, ?, ?, ?, ?, ?, 0, STRFTIME('%Y-%m-%d %H:%M:%f', 'now'))
 	`,
 		jobID,
 		videoID,
+		nullString(userID),
 		videoName.String,
 		sourcePath,
 		operations,
@@ -584,6 +596,13 @@ func (s *JobStore) DeleteForVideo(videoID string) error {
 func (s *JobStore) Delete(id string) error {
 	if _, err := s.db.Exec("DELETE FROM jobs WHERE id = ?", id); err != nil {
 		return fmt.Errorf("deleting job %s: %w", id, err)
+	}
+	return nil
+}
+
+func nullString(ns sql.NullString) interface{} {
+	if ns.Valid {
+		return ns.String
 	}
 	return nil
 }

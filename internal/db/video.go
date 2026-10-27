@@ -44,6 +44,7 @@ func NewVideoStore(db *sql.DB) *VideoStore {
 
 const videoColumns = `
 	id,
+	user_id,
 	original_path,
 	output_path,
 	status,
@@ -65,6 +66,7 @@ type rowScanner interface {
 func scanVideo(row rowScanner) (*models.Video, error) {
 	var (
 		v            models.Video
+		userID       sql.NullString
 		outputPath   sql.NullString
 		operations   sql.NullString
 		errMsg       sql.NullString
@@ -78,6 +80,7 @@ func scanVideo(row rowScanner) (*models.Video, error) {
 
 	err := row.Scan(
 		&v.ID,
+		&userID,
 		&v.OriginalPath,
 		&outputPath,
 		&v.Status,
@@ -94,6 +97,10 @@ func scanVideo(row rowScanner) (*models.Video, error) {
 	if err != nil {
 		return nil, err
 	}
+	if userID.Valid {
+		u := userID.String
+		v.UserID = &u
+	}
 
 	v.OutputPath = outputPath.String
 	v.Operations = operations.String
@@ -109,9 +116,14 @@ func scanVideo(row rowScanner) (*models.Video, error) {
 }
 
 func (s *VideoStore) Create(video *models.Video) error {
+	var userID interface{}
+	if video.UserID != nil {
+		userID = *video.UserID
+	}
 	_, err := s.db.Exec(`
 		INSERT INTO videos (
 			id,
+			user_id,
 			original_path,
 			original_name,
 			file_size,
@@ -121,9 +133,10 @@ func (s *VideoStore) Create(video *models.Video) error {
 			width,
 			height
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		video.ID,
+		userID,
 		video.OriginalPath,
 		video.OriginalName,
 		video.FileSize,
