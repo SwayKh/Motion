@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -25,15 +26,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-type testEnv struct {
-	dir     string
-	db      *sql.DB
-	store   *db.VideoStore
-	jobs    *db.JobStore
-	manager *job.Manager
-	server  *httptest.Server
-}
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
@@ -66,7 +58,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		database.Close()
 	})
 
-	return &testEnv{
+	env := &testEnv{
 		dir:     dir,
 		db:      database,
 		store:   store,
@@ -74,6 +66,54 @@ func newTestEnv(t *testing.T) *testEnv {
 		manager: manager,
 		server:  server,
 	}
+	env.setupAuth(t)
+	return env
+}
+
+func (e *testEnv) setupAuth(t *testing.T) {
+	t.Helper()
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	// register
+	body := `{"email":"test@example.com","password":"password123","passwordConfirm":"password123"}`
+	req, _ := http.NewRequest(http.MethodPost, e.url("/api/auth/register"), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
+		// try login
+		body = `{"email":"test@example.com","password":"password123"}`
+		req, _ = http.NewRequest(http.MethodPost, e.url("/api/auth/login"), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err = client.Do(req)
+		if err != nil {
+			t.Fatalf("login: %v", err)
+		}
+		resp.Body.Close()
+	}
+	// Get CSRF
+	req, _ = http.NewRequest(http.MethodGet, e.url("/api/auth/csrf"), nil)
+	resp, _ = client.Do(req)
+	if resp != nil {
+		resp.Body.Close()
+	}
+	e.client = client
+	globalTestClient = client
+}
+
+var globalTestClient *http.Client
+
+type testEnv struct {
+	dir     string
+	db      *sql.DB
+	store   *db.VideoStore
+	jobs    *db.JobStore
+	manager *job.Manager
+	server  *httptest.Server
+	client  *http.Client
 }
 
 func (e *testEnv) startManager(t *testing.T) {
@@ -133,6 +173,15 @@ func (e *testEnv) seedVideo(t *testing.T, status string) *models.Video {
 		Width:        640,
 		Height:       360,
 	}
+	// assign to test user if authenticated
+	if globalTestClient != nil {
+		// get user id from DB
+		var uid string
+		e.db.QueryRow("SELECT id FROM users LIMIT 1").Scan(&uid)
+		if uid != "" {
+			video.UserID = &uid
+		}
+	}
 
 	if err := e.store.Create(&video); err != nil {
 		t.Fatalf("create video: %v", err)
@@ -179,8 +228,22 @@ func doRequest(t *testing.T, method, url, body, contentType string) (*http.Respo
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}
-
-	response, err := http.DefaultClient.Do(request)
+	// try to get CSRF from cookie if present
+	client := http.DefaultClient
+	if globalTestClient != nil {
+		client = globalTestClient
+		if globalTestClient.Jar != nil {
+			if cookies := globalTestClient.Jar.Cookies(request.URL); len(cookies) > 0 {
+				for _, c := range cookies {
+					request.AddCookie(c)
+					if c.Name == "cinecut_csrf" && (method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions) {
+						request.Header.Set("X-CSRF-Token", c.Value)
+					}
+				}
+			}
+		}
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("do request: %v", err)
 	}
@@ -217,7 +280,21 @@ func postMultipart(t *testing.T, url, field, filename string, content []byte) (*
 	}
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 
-	response, err := http.DefaultClient.Do(request)
+	client := http.DefaultClient
+	if globalTestClient != nil {
+		client = globalTestClient
+		if globalTestClient.Jar != nil {
+			if cookies := globalTestClient.Jar.Cookies(request.URL); len(cookies) > 0 {
+				for _, c := range cookies {
+					request.AddCookie(c)
+					if c.Name == "cinecut_csrf" {
+						request.Header.Set("X-CSRF-Token", c.Value)
+					}
+				}
+			}
+		}
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		t.Fatalf("upload request: %v", err)
 	}
