@@ -2,9 +2,9 @@
 
 Motion is a local, self-hosted video processing web application written in Go. It lets a user upload a video, build a short FFmpeg processing pipeline, run it as a persistent background job, follow progress, cancel work, and preview or download the result.
 
-The project is aimed at developers and hobbyists who want a small, readable example of combining Go, SQLite, FFmpeg, background workers, and a vanilla JavaScript frontend. It is currently a **single-user local tool**, not a production SaaS product.
+The project is aimed at developers and hobbyists who want a small, readable example of combining Go, SQLite, FFmpeg, background workers, and a vanilla JavaScript frontend. It supports multi-user authentication with per-user ownership; treat it as a self-hostable tool and review the security notes before exposing beyond trusted networks.
 
-> `ProjectSpec.md` contains early design notes and aspirational ideas. Some of those ideas (authentication, cloud storage, GIF export, rotation, format conversion, a delete endpoint) are **not implemented**. This README documents the current code.
+> `ProjectSpec.md` contains early design notes and aspirational ideas. This README documents the current implementation.
 
 ## Features
 
@@ -25,13 +25,13 @@ The project is aimed at developers and hobbyists who want a small, readable exam
 ### Frontend
 
 - Drag-and-drop and file-picker upload with browser-side type and size checks.
-- Library list with status badges, duration, resolution, file size, and live progress.
-- Video/audio preview with switches between the original and the latest processed output.
-- Pipeline builder with add, reorder, edit, remove, and client-side validation.
-- Process panel with progress, error details, cancellation, output preview, and download.
-- Per-video job history with preview/download/cancel actions.
-- Polling every 1.4 seconds while a job is active.
-- Selected video remembered in `localStorage` under `motion:selected-video`.
+- Library/video selector with status and metadata.
+- Video/audio preview with switches between the original and processed output.
+- Tool-based editor to add/reorder/remove operations with inline configuration and validation.
+- Process/Export panel with progress, error details, cancellation, output preview, and download.
+- Job history with preview/download/cancel actions.
+- Polling while a job is active.
+- Theme toggle (light/dark/system) with persistence.
 
 ### Upload limits and formats
 
@@ -45,9 +45,17 @@ The project is aimed at developers and hobbyists who want a small, readable exam
 
 The extension check is not a codec guarantee. Files are also probed with FFprobe, and corrupt or non-media files are rejected. Because the 150 MiB limit applies to the whole multipart request, a file very close to 150 MiB can fail due to multipart overhead. Audio-only uploads are currently rejected by the video-stream check. Video-only uploads are accepted; `trim`, `speed`, and `flip` work without audio, while `volume` and `to_audio` fail with an explicit missing-audio job error. Invalid media and other client mistakes return `400`; storage, probing-infrastructure, and database failures return `500`.
 
+### Implemented security & ops features
+
+- User registration/login, password hashing (bcrypt), session-based auth with idle/absolute TTLs, session rotation/revocation.
+- Per-user ownership enforced on videos/jobs with CSRF protection for cookie-authenticated state changes.
+- Rate limiting on login/register/password-reset endpoints; trusted-origin CORS with credentials only for trusted origins.
+- Environment-based configuration via `internal/config` (see Configuration).
+- Dockerfile, docker-compose, and healthchecks included.
+
 ### Not implemented
 
-The current code does **not** include authentication, user accounts, API keys, cloud/object storage, signed upload URLs, rate limiting, per-IP limits, GIF export, rotation, crop, resize, format conversion, subtitle handling, video merging, a `DELETE` endpoint, WebSocket/SSE progress, or Docker/deployment configuration.
+The current code does **not** include API keys, cloud/object storage, signed upload URLs, broad per-IP active-job quotas beyond basic rate limits, GIF export, rotation, crop, resize, general format conversion (beyond MP4/MP3 for current operations), subtitle handling, video merging, a `DELETE` endpoint, or WebSocket/SSE progress (polling is used).
 
 ## Screenshots
 
@@ -160,8 +168,8 @@ ffprobe -version
 Clone the repository (replace `<repository-url>` with your remote):
 
 ```bash
-git clone <repository-url> VideoProject
-cd VideoProject
+git clone <repository-url> Motion
+cd Motion
 ```
 
 Install Go dependencies:
@@ -477,16 +485,14 @@ No license file is included in this repository; do not assume a license for redi
 
 These are potential improvements, **not implemented features**:
 
-- Authentication, user accounts, and per-user isolation of videos/jobs.
-- Environment-variable or flag-based configuration (port, paths, worker count, limits).
 - A delete endpoint and configurable retention policy.
-- Rate limiting, per-IP quotas, and resource limits/timeouts for FFmpeg.
+- Per-IP quotas and resource limits/timeouts for FFmpeg (sandboxing).
 - More editing operations (rotate, resize, crop, format conversion, GIF, subtitles).
 - Push-based progress (SSE/WebSocket) instead of polling.
 - More accurate progress for trimmed and speed-adjusted outputs.
 - Pagination and independent retention/cleanup for job history.
-- Docker and deployment examples.
 - Expanded automated tests for cancellation races and frontend behavior.
+- API keys and alternate auth mechanisms.
 
 ## Documentation
 
