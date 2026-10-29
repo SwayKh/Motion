@@ -1,3 +1,59 @@
+
+/* Topbar for landing/auth pages */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px clamp(16px, 4vw, 32px);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  flex-wrap: nowrap;
+}
+
+.topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.landing-header {
+  justify-content: space-between;
+}
+
+.landing-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.landing-actions .btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+  .topbar-actions,
+  .landing-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
 :root,
 [data-theme="dark"] {
   --bg: #242522;
@@ -1203,4 +1259,21 @@ select {
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+}
+
+/* Button fixes */
+.btn-primary {
+  background: var(--accent);
+  color: #f7f3ee !important;
+  border: 1px solid transparent;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: #f7f3ee !important;
+}
+
+.form-actions .btn-primary,
+.form-card .btn-primary {
+  min-width: 120px;
 }
