@@ -218,27 +218,33 @@ Some API integration tests generate videos with FFmpeg and are skipped when `ffm
 
 ## Configuration
 
-There are **no environment variables, command-line flags, or configuration files** read by the application. All operational values are hardcoded. To change them, edit the source and rebuild.
+Configuration is via environment variables (loaded by `internal/config`). See `.env.example` for defaults. Values can also be passed in Docker via environment or `.env`.
 
-| Setting | Current value | Location |
-| --- | --- | --- |
-| HTTP listen address | `:8080` (all interfaces) | `main.go:51` |
-| Static frontend directory | `./web` | `main.go:52` |
-| Database path | `data/app.db` | `main.go:26` |
-| Runtime directories | `uploads/`, `outputs/`, `data/` | `main.go:85-98` |
-| Worker count | `3` | `main.go:34` |
-| Upload body limit | 150 MiB | `internal/api/handlers.go:22`, `internal/service/process.go:38` |
-| Process request body limit | 1 MiB | `internal/api/handlers.go:23` |
-| Maximum duration | 300 seconds | `internal/service/process.go:139` |
-| Maximum width/height | 1920 / 1080 | `internal/service/process.go:144` |
-| Maximum operations | 10 | `internal/validation/validate.go:15` |
-| Speed range | 0.5–2.0 inclusive | `internal/validation/validate.go:16-17` |
-| Job list default limit | 200 | `internal/api/handlers.go:141`, `internal/db/job.go:197-200` |
-| Cleanup interval | 1 hour | `internal/job/cleanup.go:13-16` |
-| Retention age | Video and every associated job must be at least 24 hours old | `internal/job/cleanup.go:13-15`, `internal/db/video.go` |
-| CORS policy | any origin, any method/header | `internal/api/middleware.go` |
+| Setting | Default | Env var | Notes |
+| --- | --- | --- | --- |
+| HTTP listen address/port | `:8080` | `PORT` | `main.go` normalizes `PORT` (adds `:` if missing). Binds to all interfaces. |
+| Static frontend directory | `./web` | — | Set via `api.NewRouter`. |
+| Database path | `data/app.db` | — | `main.go:27` |
+| Runtime directories | `uploads/`, `outputs/`, `data/` | — | Created on startup. |
+| Worker count | `3` | — | `main.go:35` |
+| Session TTL | `24h` | `SESSION_TTL` | `internal/config` |
+| Session idle TTL | `2h` | `SESSION_IDLE_TTL` | `internal/config` |
+| Secure cookies | auto (true if `APP_ENV=production`) | `SECURE_COOKIES` | Also set in Docker. |
+| Trusted origins (CORS) | empty (same-origin/non-browser allowed; untrusted origins restricted) | `TRUSTED_ORIGINS` | Comma-separated origins. |
+| Rate limits | login 10/min, register 5/min, reset 3/hour | `RATE_LIMIT_LOGIN`, `RATE_LIMIT_REGISTER`, `RATE_LIMIT_RESET` | `internal/rate` |
+| SMTP (password reset) | disabled (DevNull) | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | If unset, reset emails are not sent (tokens still generated internally). |
+| Base URL | `http://localhost:8080` | `BASE_URL` | Used in reset emails. |
+| Upload body limit | 150 MiB | — | `internal/api/handlers.go` |
+| Process request body limit | 1 MiB | — | `internal/api/handlers.go` |
+| Maximum duration | 300 seconds | — | `internal/service/process.go` |
+| Maximum width/height | 1920 / 1080 | — | `internal/service/process.go` |
+| Maximum operations | 10 | — | `internal/validation/validate.go` |
+| Speed range | 0.5–2.0 inclusive | — | `internal/validation/validate.go` |
+| Cleanup interval | 1 hour | — | `internal/job/cleanup.go` |
+| Retention age | Video and every associated job must be at least 24 hours old | — | `internal/job/cleanup.go` |
+| CORS policy | Restricted by trusted origins (credentials allowed only for trusted origins) | — | `internal/api/middleware.go` |
 
-The listen address binds to all network interfaces, not only loopback. The server has no authentication; see [Security and limitations](#security-and-limitations).
+The listen address binds to all network interfaces, not only loopback. Authentication is enabled by default with session-based auth, CSRF protection, and per-user ownership; see [Security and limitations](#security-and-limitations).
 
 ## Usage guide
 
@@ -451,19 +457,19 @@ For detailed troubleshooting and manual tests, see [docs/DEVELOPMENT.md](docs/DE
 
 ## Security and limitations
 
-**This application is not production-ready and has no authentication.** Anyone who can reach port 8080 can upload files, process videos, browse the library, and download outputs.
+**This application has authentication, session management, CSRF protection, and per-user ownership, but it is not fully hardened for production use by default.**
 
-- The HTTP server binds to `:8080` on all interfaces, so it may be reachable from the local network by default.
-- CORS allows any origin, method, and header. There are no credentials or auth headers.
-- There is no TLS, reverse proxy configuration, user isolation, rate limiting, quota, malware scanning, or per-IP active-job limit.
-- Upload validation checks the extension, size, and FFprobe metadata, but it does not guarantee that a file is safe. FFmpeg processes untrusted media at the server's privilege level with no sandbox, CPU/memory limit, or job timeout.
-- Uploaded files are stored with generated UUID names under `uploads/`; the original client filename is sanitized with `filepath.Base` and used only for display/download headers. API responses deliberately omit filesystem paths.
-- File-serving routes use paths loaded from the database and require the record/file to exist; the URL `{id}` is not used directly as a filesystem path. There is still no authorization around those files.
-- The database and media are unencrypted, and both persist on disk until explicitly deleted or cleaned up.
-- There is no `DELETE` endpoint, no account boundary, and no audit log.
-- The frontend escapes user-controlled strings before inserting them into HTML, but the application should still be placed behind authentication, TLS, and a firewall before any non-local exposure.
+- **Authentication/Authorization:** User registration/login, password hashing (bcrypt), session cookies (`HttpOnly`, `SameSite=Lax`), idle/absolute session TTLs, password change revokes other sessions, password reset via token (rate-limited). All video/job endpoints require authentication; resources are filtered by ownership.  
+- **CSRF:** Double-submit CSRF protection is enforced for state-changing requests when using cookie-based auth (CSRF cookie + `X-CSRF-Token` header or `_csrf` form field).  
+- **Network/CORS:** HTTP server binds to all interfaces by default. CORS is restricted by `TRUSTED_ORIGINS` (comma-separated); credentials are only allowed for trusted origins. Untrusted cross-origin requests without trust are handled strictly.  
+- **Rate limiting:** In-memory rate limits on login/register/password-reset endpoints.  
+- **Input validation & media safety:** Upload validation checks extension, size, and FFprobe metadata (duration/resolution/stream). FFmpeg processes untrusted media at the server privilege level with no sandbox, CPU/memory limit, or job timeout.  
+- **File handling:** Uploaded files stored with generated UUID names under `uploads/`; original filenames sanitized via `filepath.Base` for display/headers. File-serving routes validate paths are within allowed directories (`uploads/`, `outputs/`), use paths from the database, and enforce ownership. API responses omit internal filesystem paths.  
+- **Storage:** Database/media unencrypted on disk until deleted/cleaned up.  
+- **Other:** No `DELETE` endpoint, limited audit logging, no malware scanning, no per-IP job quotas.  
+- **TLS/Deployment:** No TLS in-app; use a reverse proxy and set `SECURE_COOKIES=true` in production.
 
-Before exposing Motion publicly, add authentication/authorization, restrict CORS, bind to loopback or a private interface, enforce upload/processing quotas and timeouts, isolate FFmpeg (container/user/limits), add request rate limiting, and serve over TLS.
+**Recommendations before public exposure:** Bind to loopback/private interface or put behind auth proxy, restrict `TRUSTED_ORIGINS`, use HTTPS + secure cookies, enforce upload/processing quotas/timeouts, isolate FFmpeg (container/non-root with limits), add stronger rate limiting, consider malware scanning, and implement backup/retention policies.
 
 No license file is included in this repository; do not assume a license for redistribution.
 
@@ -492,32 +498,6 @@ These are potential improvements, **not implemented features**:
 ## Docker Deployment
 
 ### Build and run with Docker Compose
-
-
-### Volumes
-- `motion_data` persists `data/` (SQLite database)
-- `motion_uploads` persists `uploads/` (original files)
-- `motion_outputs` persists `outputs/` (processed files)
-
-### Configuration
-Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options.
-
-### Health check
-The container has a health check against `GET /health`.
-
-### Reverse proxy & HTTPS
-Run behind a reverse proxy and terminate TLS. Set `SECURE_COOKIES=true` in production when using HTTPS.
-
-### Backup
-Backup volumes: `motion_data`, `motion_uploads`, `motion_outputs`.
-
-### Upgrade
-Pull new code, rebuild image, restart containers. Migrations run on startup.
-
-
-## Docker Deployment
-
-### Build and run with Docker Compose
 ```bash
 docker compose up --build -d
 ```
@@ -528,16 +508,13 @@ docker compose up --build -d
 - `motion_outputs` persists `outputs/` (processed files)
 
 ### Configuration
-Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options.
-
-### Health check
-The container has a health check against `GET /health`.
+Configure via environment variables in `docker-compose.yml` or `.env`. See `.env.example` for options. The container runs as non-root user `motion`, uses `ffmpeg` from the base image, and has a health check on `GET /health`.
 
 ### Reverse proxy & HTTPS
 Run behind a reverse proxy and terminate TLS. Set `SECURE_COOKIES=true` in production when using HTTPS.
 
 ### Backup
-Backup volumes: `motion_data`, `motion_uploads`, `motion_outputs`.
+Backup volumes: `motion_data`, `motion_uploads`, `motion_outputs`. For SQLite consistency, stop the app or use an online backup strategy.
 
 ### Upgrade
 Pull new code, rebuild image, restart containers. Migrations run on startup.
