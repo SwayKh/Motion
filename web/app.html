@@ -1,74 +1,180 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Motion Studio — video processing dashboard" />
-    <title>Motion Studio — Video Processing</title>
+    <meta name="description" content="Motion — simple video processing" />
+    <title>Motion — Edit and export</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles.css" />
+    <script>
+      (function() {
+        try {
+          const stored = localStorage.getItem('motion:theme');
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (stored === 'light') document.documentElement.dataset.theme = 'light';
+          else if (stored === 'dark') document.documentElement.dataset.theme = 'dark';
+          else if (prefersDark) document.documentElement.dataset.theme = 'dark';
+          else document.documentElement.dataset.theme = 'light';
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" fill="none">
-            <rect x="3" y="7" width="26" height="18" rx="3" stroke="currentColor" stroke-width="1.6" />
-            <path d="M12 12.5v7l6-3.5-6-3.5Z" fill="currentColor" />
-          </svg>
-        </div>
-        <div class="brand-copy">
-          <span class="brand-name">MOTION</span>
-          <span class="brand-sub">Video processing studio</span>
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <rect x="3" y="7" width="26" height="18" rx="4" stroke="currentColor" stroke-width="1.6" />
+              <path d="M12 12.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+            </svg>
+          </div>
+          <span class="brand-name">Motion</span>
         </div>
       </div>
-
-      <div class="topbar-actions">
-        <span id="userInfo" style="color: var(--text-subtle);"></span>
-        <a class="btn btn-ghost" href="/account.html">Account</a>
-        <button class="btn btn-ghost" id="logoutBtnTop" type="button">Logout</button>
-        <div class="backend-status" id="backendStatus" data-state="checking" title="Backend connection">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="backendStatusText">Checking backend…</span>
+      <div class="header-center">
+        <div class="video-selector" role="group" aria-label="Current video">
+          <button class="video-select-btn" id="videoSelectBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="video-select-label" id="videoSelectLabel">Choose or upload a video</span>
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="m6 8 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <div class="video-select-menu hidden" id="videoSelectMenu" role="listbox">
+            <div class="video-select-head">
+              <span>Your videos</span>
+              <button class="btn-text" id="openUploadFromMenu" type="button">Upload new</button>
+            </div>
+            <div class="video-select-list" id="videoSelectList"></div>
+            <div class="video-select-empty hidden" id="videoSelectEmpty">No videos yet</div>
+          </div>
         </div>
-        <button class="btn btn-ghost" id="refreshBtn" type="button">
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-            <path d="M16.5 8A6.5 6.5 0 1 0 17 12" stroke-linecap="round" />
-            <path d="M16.5 3.5V8H12" stroke-linecap="round" stroke-linejoin="round" />
+      </div>
+      <div class="header-right">
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle theme">
+          <svg class="theme-icon theme-icon-light" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <circle cx="10" cy="10" r="3.5" />
+            <path d="M10 2v2m0 12v2M4.93 4.93l1.41 1.41m7.32 7.32 1.41 1.41M2 10h2m12 0h2M4.93 15.07l1.41-1.41m7.32-7.32 1.41-1.41" stroke-linecap="round" />
           </svg>
-          <span>Refresh library</span>
+          <svg class="theme-icon theme-icon-dark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M17 10.5A7 7 0 1 1 9.5 3a5.5 5.5 0 0 0 7.5 7.5Z" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="theme-label">Theme</span>
         </button>
+        <span id="userInfo" class="user-info"></span>
+        <a class="btn-text" href="/account.html">Account</a>
+        <button class="btn-text" id="logoutBtnTop" type="button">Logout</button>
+        <div class="backend-dot" id="backendStatus" data-state="checking" title="Backend status">
+          <span class="dot"></span>
+        </div>
       </div>
     </header>
 
-    <main class="app">
-      <aside class="sidebar">
-        <section class="sidebar-section upload-section" aria-labelledby="uploadHeading">
-          <div class="section-intro">
-            <h2 id="uploadHeading">Upload video</h2>
-            <p>Add a source file to start a new edit.</p>
+    <main class="main">
+      <section class="workspace" aria-label="Video workspace">
+        <div class="workspace-grid">
+          <div class="workspace-main">
+            <section class="tools-section" aria-labelledby="toolsHeading">
+              <div class="section-header-row">
+                <div>
+                  <h1 id="toolsHeading">Edit your video</h1>
+                  <p class="section-sub">Pick a tool to add changes. You can add multiple edits in order.</p>
+                </div>
+                <button class="btn-ghost" id="uploadQuickBtn" type="button">Upload video</button>
+              </div>
+
+              <div class="tools-grid" id="toolsGrid" role="radiogroup" aria-label="Editing tools"></div>
+
+              <div class="tool-config hidden" id="toolConfig" aria-live="polite">
+                <div class="tool-config-header">
+                  <div>
+                    <h2 id="toolConfigTitle">Configure</h2>
+                    <p id="toolConfigDesc"></p>
+                  </div>
+                  <button class="btn-text" id="closeToolConfig" type="button">Cancel</button>
+                </div>
+                <div class="tool-config-body" id="toolConfigBody"></div>
+                <div class="tool-config-actions">
+                  <button class="btn-primary" id="addToolBtn" type="button">Add to edits</button>
+                </div>
+              </div>
+
+              <div class="edits-section" id="editsSection">
+                <div class="edits-header">
+                  <h2>Your edits</h2>
+                  <span class="edits-count" id="editsCount">0 / 10</span>
+                </div>
+                <div class="edits-list" id="editsList"></div>
+                <div class="edits-empty" id="editsEmpty">No edits yet. Select a tool above to get started.</div>
+              </div>
+
+              <div class="process-section">
+                <button class="btn-cta" id="processBtn" type="button" disabled>Process video</button>
+                <p class="process-hint" id="processHint">Add at least one edit to process.</p>
+              </div>
+            </section>
           </div>
 
+          <aside class="workspace-side">
+            <section class="preview-card" aria-labelledby="previewHeading">
+              <div class="preview-header">
+                <div>
+                  <h2 id="previewHeading">Preview</h2>
+                  <p class="preview-sub">Check your video before exporting</p>
+                </div>
+                <button class="btn-text" id="expandPreviewBtn" type="button">Expand</button>
+              </div>
+              <div class="preview-toggle">
+                <button class="toggle-btn active" data-preview-mode="original" type="button">Original</button>
+                <button class="toggle-btn" data-preview-mode="output" type="button">Result</button>
+              </div>
+              <div class="preview-body" id="previewBody"></div>
+            </section>
+
+            <section class="results-card" aria-labelledby="resultsHeading">
+              <div class="results-header">
+                <h2 id="resultsHeading">Result</h2>
+              </div>
+              <div class="results-body" id="jobBody">
+                <p class="results-empty">Process your edits to see the result here.</p>
+              </div>
+              <details class="history-details">
+                <summary>History</summary>
+                <div class="history-body" id="historyBody"></div>
+              </details>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal hidden" id="uploadModal" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+      <div class="modal-backdrop" id="uploadModalBackdrop"></div>
+      <div class="modal-content" role="document">
+        <div class="modal-header">
+          <h2 id="uploadModalTitle">Upload video</h2>
+          <button class="icon-btn" id="closeUploadModal" type="button" aria-label="Close">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="m6 6 8 8m0-8-8 8" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
           <div class="dropzone" id="dropzone">
-            <input
-              type="file"
-              id="fileInput"
-              accept=".mp4,.m4v,.mov,.mkv,.webm,.avi,.mpeg,.mpg,.3gp,video/*"
-              hidden
-            />
+            <input type="file" id="fileInput" accept=".mp4,.m4v,.mov,.mkv,.webm,.avi,.mpeg,.mpg,.3gp,video/*" hidden />
             <div class="dropzone-icon" aria-hidden="true">
               <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.4">
-                <rect x="4" y="9" width="32" height="22" rx="3" />
+                <rect x="4" y="9" width="32" height="22" rx="4" />
                 <path d="M20 24V15m0 0-4 4m4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
             </div>
-            <div class="dropzone-title">Drop a video here</div>
-            <div class="dropzone-sub">MP4, MOV, MKV, WebM, AVI, M4V, MPEG, or 3GP</div>
-            <button class="btn btn-choose" id="browseBtn" type="button">Browse files</button>
-            <div class="dropzone-limits">Maximum 150 MB · 5 minutes · 1080p</div>
+            <p class="dropzone-title">Drop video here</p>
+            <p class="dropzone-sub">or choose a file</p>
+            <button class="btn-secondary" id="browseBtn" type="button">Browse files</button>
+            <p class="dropzone-limits">MP4, MOV, MKV, WebM, AVI, M4V, MPEG, 3GP · 150 MB · up to 5 min · 1080p</p>
           </div>
-
-          <div class="upload-progress hidden" id="uploadProgress" aria-live="polite">
+          <div class="upload-progress hidden" id="uploadProgress">
             <div class="upload-progress-head">
               <span id="uploadStatusText">Uploading…</span>
               <span id="uploadPercent">0%</span>
@@ -77,64 +183,30 @@
               <div class="progress-fill" id="uploadProgressFill"></div>
             </div>
           </div>
-        </section>
+        </div>
+      </div>
+    </div>
 
-        <section class="sidebar-section library-section" aria-labelledby="libraryHeading">
-          <div class="library-head">
-            <h2 id="libraryHeading">Library</h2>
-            <span class="count-badge" id="libraryCount">0</span>
-          </div>
-          <div class="library-list" id="libraryList" aria-live="polite"></div>
-          <div class="empty-state compact hidden" id="libraryEmpty">
-            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
-              <rect x="3" y="9" width="42" height="30" rx="3" />
-              <path d="M19 18.5v11l9-5.5-9-5.5Z" fill="currentColor" stroke="none" />
+    <div class="modal hidden" id="previewModal" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+      <div class="modal-backdrop" id="previewModalBackdrop"></div>
+      <div class="modal-content modal-large" role="document">
+        <div class="modal-header">
+          <h2 id="previewModalTitle">Preview</h2>
+          <button class="icon-btn" id="closePreviewModal" type="button" aria-label="Close">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+              <path d="m6 6 8 8m0-8-8 8" stroke-linecap="round" />
             </svg>
-            <p>No videos yet</p>
-            <span>Upload a video to get started.</span>
-          </div>
-          <div class="inline-error hidden" id="libraryError" role="alert"></div>
-        </section>
-
-        <p class="sidebar-foot">
-          Completed and failed jobs are removed from the server after 24 hours.
-        </p>
-      </aside>
-
-      <section class="workspace">
-        <div class="empty-state workspace-empty" id="workspaceEmpty">
-          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.1" aria-hidden="true">
-            <rect x="5" y="13" width="54" height="38" rx="4" />
-            <path d="M26 24v16l13-8-13-8Z" fill="currentColor" stroke="none" />
-          </svg>
-          <p>Choose a video to start editing</p>
-          <span>Upload a file or select one from the library to preview it and build a processing pipeline.</span>
+          </button>
         </div>
-
-        <div class="workspace-content hidden" id="workspaceContent">
-          <header class="workspace-head">
-            <h1 id="workspaceTitle">—</h1>
-            <p id="workspaceSub">—</p>
-          </header>
-
-          <div class="workspace-body">
-            <section class="panel preview-panel" aria-label="Video preview">
-              <div id="previewBody"></div>
-            </section>
-
-            <div class="work-grid">
-              <section class="panel editor-panel" aria-label="Edit video">
-                <div id="operationsBody"></div>
-              </section>
-
-              <section class="panel process-panel" aria-label="Processing status">
-                <div id="jobBody"></div>
-              </section>
-            </div>
+        <div class="modal-body">
+          <div class="preview-toggle modal-toggle">
+            <button class="toggle-btn active" data-preview-mode="original" type="button">Original</button>
+            <button class="toggle-btn" data-preview-mode="output" type="button">Result</button>
           </div>
+          <div class="preview-body modal-preview-body" id="previewModalBody"></div>
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
 
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
