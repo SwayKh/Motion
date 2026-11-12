@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Motion — multitrack video editor" />
+    <title>Motion — Editor</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/timeline.css" />
+    <script>
+      (function() {
+        try {
+          const stored = localStorage.getItem('motion:theme');
+          const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (stored === 'light') document.documentElement.dataset.theme = 'light';
+          else if (stored === 'dark') document.documentElement.dataset.theme = 'dark';
+          else if (prefersDark) document.documentElement.dataset.theme = 'dark';
+          else document.documentElement.dataset.theme = 'light';
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="editor-page">
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <rect x="3" y="7" width="26" height="18" rx="4" stroke="currentColor" stroke-width="1.6" />
+              <path d="M12 12.5v7l6-3.5-6-3.5Z" fill="currentColor" />
+            </svg>
+          </div>
+          <span class="brand-name">Motion</span>
+          <span class="brand-sub">Editor</span>
+        </div>
+      </div>
+      <div class="header-center">
+        <input class="input" id="projectNameInput" placeholder="Untitled timeline" aria-label="Timeline name" />
+      </div>
+      <div class="header-right">
+        <a class="btn-text" href="/app.html">Library</a>
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle theme">
+          <svg class="theme-icon theme-icon-light" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <circle cx="10" cy="10" r="3.5" />
+            <path d="M10 2v2m0 12v2M4.93 4.93l1.41 1.41m7.32 7.32 1.41 1.41M2 10h2m12 0h2M4.93 15.07l1.41-1.41m7.32-7.32 1.41-1.41" stroke-linecap="round" />
+          </svg>
+          <svg class="theme-icon theme-icon-dark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M17 10.5A7 7 0 1 1 9.5 3a5.5 5.5 0 0 0 7.5 7.5Z" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <span id="userInfo" class="user-info"></span>
+        <a class="btn-text" href="/account.html">Account</a>
+        <button class="btn-text" id="logoutBtnTop" type="button">Logout</button>
+        <div class="backend-dot" id="backendStatus" data-state="checking" title="Backend status"><span class="dot"></span></div>
+      </div>
+    </header>
+
+    <main class="editor-main">
+      <section class="editor-stage" aria-label="Preview">
+        <div class="verify-banner hidden" id="verifyBanner" role="status">
+          <span>Verify your email address to render timelines.</span>
+          <button class="btn-text" id="verifyResendBtn" type="button">Resend email</button>
+        </div>
+
+        <div class="preview-frame" id="previewFrame">
+          <video id="previewVideo" playsinline preload="auto"></video>
+          <div class="preview-overlay-layer" id="previewOverlays"></div>
+          <div class="preview-empty hidden" id="previewEmpty">Add a clip to the timeline to preview it.</div>
+        </div>
+
+        <div class="preview-transport">
+          <button class="btn-secondary" id="playBtn" type="button">Play</button>
+          <button class="btn-text" id="stepBackBtn" type="button" title="Step back one frame (←)">⟨ Frame</button>
+          <button class="btn-text" id="stepFwdBtn" type="button" title="Step forward one frame (→)">Frame ⟩</button>
+          <span class="time-readout" id="timeReadout">0:00.0 / 0:00.0</span>
+          <label class="tl-speed">
+            <span class="sr-only">Playback speed</span>
+            <select class="select select-compact" id="speedSelect" aria-label="Playback speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+          </label>
+          <button class="btn-text" id="fullscreenBtn" type="button" title="Fullscreen preview">Fullscreen</button>
+          <span class="spacer"></span>
+          <span class="preview-note">Preview is approximate; the rendered file is authoritative.</span>
+        </div>
+      </section>
+
+      <section class="editor-timeline-panel" aria-label="Timeline">
+        <div class="tl-toolbar">
+          <div class="tl-tool-group" role="group" aria-label="Clip edits">
+            <button class="btn-text" id="splitBtn" type="button" title="Split the clip under the playhead (S)">Split</button>
+            <button class="btn-text" id="joinBtn" type="button" title="Join the selected clip with the next clip on its track (J)">Join</button>
+            <button class="btn-text" id="duplicateBtn" type="button" title="Duplicate the selected clip (D)">Duplicate</button>
+            <button class="btn-text" id="deleteClipBtn" type="button" title="Delete the selected clip (Delete)">Delete</button>
+          </div>
+          <div class="tl-tool-group" role="group" aria-label="Range edits">
+            <button class="btn-text" id="markInBtn" type="button" title="Mark range in at the playhead (I)">In</button>
+            <button class="btn-text" id="markOutBtn" type="button" title="Mark range out at the playhead (O)">Out</button>
+            <button class="btn-text" id="removeBtn" type="button" title="Remove the marked range from every track (R)">Remove</button>
+            <button class="btn-text" id="extractBtn" type="button" title="Cut the marked range out, leaving a gap (X)">Extract</button>
+            <button class="btn-text" id="keepBtn" type="button" title="Keep only the marked range (K)">Keep</button>
+            <button class="btn-text" id="clearRangeBtn" type="button" title="Clear the marked range (Esc)">Clear</button>
+            <label class="tl-check" title="Shift later clips left when removing a range">
+              <input type="checkbox" id="rippleToggle" /> Ripple
+            </label>
+          </div>
+          <span class="spacer"></span>
+          <div class="tl-zoom">
+            <button class="btn-text" id="zoomOutBtn" type="button" aria-label="Zoom out">−</button>
+            <span id="zoomLabel">60 px/s</span>
+            <button class="btn-text" id="zoomInBtn" type="button" aria-label="Zoom in">+</button>
+            <button class="btn-text" id="zoomFitBtn" type="button">Fit</button>
+          </div>
+        </div>
+        <div class="tl-media-bar">
+          <select class="select select-compact" id="assetSelect" aria-label="Asset to add"></select>
+          <button class="btn-text" id="addVideoClipBtn" type="button">+ Video</button>
+          <button class="btn-text" id="addAudioClipBtn" type="button">+ Audio</button>
+          <button class="btn-text" id="addTextClipBtn" type="button">+ Text</button>
+          <button class="btn-text" id="addVideoTrackBtn" type="button" title="Add an empty video track (for overlays / picture-in-picture)">+ Video track</button>
+          <button class="btn-text" id="addAudioTrackBtn" type="button" title="Add an empty audio track">+ Audio track</button>
+          <span class="spacer"></span>
+          <span class="tl-hint">Drag a clip to move it · drag its edges to trim · shift-drag the ruler to mark a range · use a track's + to add a clip to it</span>
+        </div>
+        <div class="tl-body-host">
+          <div id="timelineRoot"></div>
+        </div>
+        <div class="tl-status">
+          <span id="rangeReadout">No range marked</span>
+          <span class="spacer"></span>
+          <span class="tl-keys">Space play · S split · I/O mark · R remove · X extract · K keep · J join · ←/→ frame · Del delete</span>
+        </div>
+      </section>
+
+      <aside class="editor-side">
+        <section class="panel" aria-labelledby="inspectorHeading">
+          <h2 id="inspectorHeading">Clip</h2>
+          <p class="preview-note" id="inspectorEmpty">Select a clip on the timeline to edit it.</p>
+          <p class="inspector-meta" id="inspectorMeta"></p>
+          <div id="inspectorFields" class="hidden">
+            <div class="field" id="fieldText">
+              <span class="field-label">Text</span>
+              <textarea class="input" id="clipText" rows="2"></textarea>
+            </div>
+            <div class="field" id="fieldVolume">
+              <span class="field-label">Volume <span id="volumeValue">100%</span></span>
+              <input class="input" id="clipVolume" type="range" min="0" max="2" step="0.05" value="1" />
+            </div>
+            <div class="field" id="fieldOpacity">
+              <span class="field-label">Opacity <span id="opacityValue">100%</span></span>
+              <input class="input" id="clipOpacity" type="range" min="0" max="1" step="0.05" value="1" />
+            </div>
+            <div class="input-row" id="fieldGeometry">
+              <label class="field"><span class="field-label">X (px)</span><input class="input" id="clipX" type="number" step="1" value="0" /></label>
+              <label class="field"><span class="field-label">Y (px)</span><input class="input" id="clipY" type="number" step="1" value="0" /></label>
+            </div>
+            <div class="field" id="fieldScale">
+              <span class="field-label">Scale</span>
+              <input class="input" id="clipScale" type="number" min="0.1" max="4" step="0.05" value="1" />
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="renderHeading">
+          <h2 id="renderHeading">Render</h2>
+          <label class="field"><span class="field-label">Resolution</span>
+            <select class="select" id="renderResolution">
+              <option value="">Source</option>
+              <option value="1920x1080">1920 × 1080</option>
+              <option value="1280x720">1280 × 720</option>
+              <option value="854x480">854 × 480</option>
+              <option value="640x360">640 × 360</option>
+            </select>
+          </label>
+          <label class="field"><span class="field-label">Frame rate</span>
+            <select class="select" id="renderFps">
+              <option value="">Source</option>
+              <option value="24">24 fps</option>
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </label>
+          <button class="btn-cta" id="renderBtn" type="button">Render timeline</button>
+          <p class="render-status" id="renderStatus">Not rendered yet.</p>
+          <div class="render-progress hidden" id="renderProgress"><span id="renderProgressFill"></span></div>
+          <div id="renderOutput" class="hidden" style="margin-top:10px">
+            <video id="renderOutputVideo" controls playsinline style="width:100%;border-radius:8px"></video>
+          </div>
+          <ul class="validation-list hidden" id="renderErrors"></ul>
+        </section>
+
+        <section class="panel" aria-labelledby="projectsHeading">
+          <h2 id="projectsHeading">Saved timelines</h2>
+          <div class="project-list" id="projectList"></div>
+          <div class="input-row" style="margin-top:10px">
+            <button class="btn-secondary" id="saveBtn" type="button">Save now</button>
+            <button class="btn-text" id="newProjectBtn" type="button">New</button>
+          </div>
+          <p class="render-status" id="saveStatus"></p>
+        </section>
+      </aside>
+    </main>
+
+    <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+    <script src="/auth.js"></script>
+    <script src="/timeline.js"></script>
+    <script src="/editor-page.js"></script>
+    <script src="/auth-guard.js"></script>
+  </body>
+</html>

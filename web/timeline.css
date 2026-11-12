@@ -1,0 +1,689 @@
+/* Dedicated editor page: preview + multitrack timeline.
+   Loaded after styles.css and only used by editor.html. */
+
+.editor-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.editor-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px clamp(12px, 3vw, 28px) 28px;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.editor-stage {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.editor-timeline-panel {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.editor-side {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 1080px) {
+  .editor-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+  }
+  .editor-side {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+/* ---------- Preview ---------- */
+.preview-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.preview-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.preview-overlay {
+  position: absolute;
+  max-width: 80%;
+}
+
+.preview-overlay.media {
+  max-width: none;
+  height: auto;
+}
+
+.preview-overlay.text {
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: pre-wrap;
+}
+
+.preview-overlay.image {
+  object-fit: contain;
+}
+
+.preview-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 24px;
+  text-align: center;
+}
+
+.preview-transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.preview-transport .time-readout {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--text-subtle);
+  min-width: 118px;
+}
+
+.preview-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ---------- Timeline ---------- */
+.tl-wrap {
+  --tl-head-w: 150px;
+  --tl-track-h: 56px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tl-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.tl-toolbar .spacer {
+  flex: 1;
+}
+
+.tl-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+  margin-right: 4px;
+  border-right: 1px solid var(--border);
+}
+
+.tl-tool-group:last-of-type {
+  border-right: none;
+}
+
+.tl-toolbar .btn-text.active {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-radius: 6px;
+}
+
+.tl-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  color: var(--text-subtle);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.tl-media-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tl-media-bar .spacer {
+  flex: 1;
+}
+
+.tl-media-bar .select-compact,
+.preview-transport .select-compact {
+  min-width: 0;
+  max-width: 260px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
+}
+
+.tl-hint {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.tl-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.tl-status .spacer {
+  flex: 1;
+}
+
+.tl-keys {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+
+.preview-transport .spacer {
+  flex: 1;
+}
+
+.tl-speed {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tl-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.tl-body {
+  position: relative;
+  overflow: auto;
+  max-height: 46vh;
+  min-height: 180px;
+}
+
+.tl-content {
+  position: relative;
+  min-width: 100%;
+}
+
+.tl-ruler-row {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.tl-ruler-head,
+.tl-track-head {
+  width: var(--tl-head-w);
+  min-width: var(--tl-head-w);
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+}
+
+.tl-ruler-head {
+  height: 28px;
+}
+
+.tl-ruler {
+  position: relative;
+  height: 28px;
+  flex: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tl-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border);
+}
+
+.tl-tick.major {
+  border-left-color: var(--border-strong);
+}
+
+.tl-tick-label {
+  position: absolute;
+  top: 6px;
+  left: 4px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+.tl-track-row {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  min-height: var(--tl-track-h);
+}
+
+.tl-track-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.tl-track-head .tl-track-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tl-track-head .tl-track-type {
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tl-track-head .tl-track-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.tl-track-toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-subtle);
+  border-radius: 6px;
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.tl-track-toggle.off {
+  color: var(--muted);
+  border-style: dashed;
+}
+
+.tl-track-add,
+.tl-track-remove {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-subtle);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.tl-track-add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.tl-track-remove:hover {
+  color: var(--danger, #e5484d);
+  border-color: var(--danger, #e5484d);
+}
+
+.tl-lane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(127, 127, 127, 0.12) 0,
+      rgba(127, 127, 127, 0.12) 1px,
+      transparent 1px,
+      transparent 100px
+    );
+  cursor: crosshair;
+}
+
+.tl-track-row.selected .tl-lane {
+  background-color: var(--accent-soft);
+}
+
+.tl-clip {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  overflow: hidden;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  user-select: none;
+  touch-action: none;
+  min-width: 8px;
+}
+
+/* Thumbnail filmstrip / waveform layer. The page controller supplies a single
+   sprite image per source; the frame shown is selected purely with
+   background-position and background-size, so no per-clip images are needed. */
+.tl-clip-media {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-repeat: repeat-x;
+  background-position-y: center;
+}
+
+.tl-clip-media.strip {
+  opacity: 1;
+}
+
+.tl-clip-media.wave {
+  opacity: 0.85;
+  mix-blend-mode: screen;
+}
+
+.tl-clip.video {
+  background: linear-gradient(180deg, rgba(188, 112, 85, 0.85), rgba(188, 112, 85, 0.55));
+}
+.tl-clip.audio {
+  background: linear-gradient(180deg, rgba(85, 117, 99, 0.85), rgba(85, 117, 99, 0.55));
+}
+.tl-clip.image {
+  background: linear-gradient(180deg, rgba(120, 110, 190, 0.85), rgba(120, 110, 190, 0.55));
+}
+.tl-clip.text {
+  background: linear-gradient(180deg, rgba(185, 154, 91, 0.85), rgba(185, 154, 91, 0.55));
+}
+
+/* Clips that carry a generated preview get a dark, neutral base so the
+   thumbnail or waveform reads clearly and no colour tint bleeds through. */
+.tl-clip.has-media.video,
+.tl-clip.has-media.image {
+  background: #161614;
+}
+.tl-clip.has-media.audio {
+  background: #121a16;
+}
+
+.tl-clip.selected {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+
+.tl-clip.invalid {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+.tl-clip-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 8px 3px;
+  font-size: 0.72rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tl-clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  background: rgba(0, 0, 0, 0.25);
+  touch-action: none;
+  z-index: 3;
+}
+
+.tl-clip-handle.left {
+  left: 0;
+}
+.tl-clip-handle.right {
+  right: 0;
+}
+
+.tl-clip.muted .tl-clip-label {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent-strong);
+  pointer-events: none;
+  z-index: 4;
+}
+
+.tl-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(188, 112, 85, 0.16);
+  border-left: 2px solid var(--accent-strong);
+  border-right: 2px solid var(--accent-strong);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.tl-range-handle {
+  position: absolute;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-strong);
+  border-radius: 2px;
+}
+
+.tl-range-handle.start {
+  left: -6px;
+}
+
+.tl-range-handle.end {
+  right: -6px;
+}
+
+.tl-playhead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -5px;
+  width: 12px;
+  height: 10px;
+  background: var(--accent-strong);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.tl-empty {
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* ---------- Side panel ---------- */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.panel .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.field-label {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.inspector-meta {
+  margin: 0 0 10px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.render-status {
+  font-size: 0.82rem;
+  color: var(--text-subtle);
+  margin: 8px 0 0;
+}
+
+.render-progress {
+  height: 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.render-progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.project-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.project-item .project-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.validation-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.78rem;
+  color: var(--danger);
+}
+
+.validation-list li {
+  margin-bottom: 4px;
+}
+
+.hidden {
+  display: none !important;
+}
