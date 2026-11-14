@@ -1,0 +1,71 @@
+# Motion (Java) — standalone Compose deployment.
+#
+# Fresh product install: this file creates three NEW named volumes
+# (motion_java_data / motion_java_uploads / motion_java_outputs). It does NOT
+# reuse or map any data from the old Go stack; Motion Java starts with an empty
+# database and initializes its schema automatically on first boot.
+#
+# Prerequisites:
+#   - an external Docker network named "homelab" for the reverse proxy
+#     (create with:  docker network create homelab  — only once, if missing)
+#   - a `.env` file next to this file (see backend-java/.env.example)
+#
+# Start:   docker compose -f docker-compose.java.yml --profile java up -d --build
+# Stop:    docker compose -f docker-compose.java.yml --profile java down
+#           (never add -v; that would delete your data volumes)
+# Logs:    docker compose -f docker-compose.java.yml logs -f motion-java
+services:
+  motion-java:
+    build:
+      # Repository root context so the image can bundle the unchanged web/ frontend.
+      context: .
+      dockerfile: backend-java/Dockerfile
+    container_name: motion-java
+    profiles:
+      - java
+    restart: unless-stopped
+    # No host port is published: a reverse proxy (e.g. Caddy) reaches Motion at
+    # http://motion-java:8080 over the shared "homelab" network and terminates
+    # TLS. To expose directly instead, uncomment and keep it bound to loopback:
+    # ports:
+    #   - "127.0.0.1:8080:8080"
+    expose:
+      - "8080"
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      APP_ENV: production
+      SPRING_PROFILES_ACTIVE: production
+      SECURE_COOKIES: "true"
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
+      MOTION_DATA_DIR: /app/data
+      MOTION_UPLOAD_DIR: /app/uploads
+      MOTION_OUTPUT_DIR: /app/outputs
+      MOTION_STATIC_DIR: /app/web
+      MOTION_FLYWAY_ENABLED: "true"
+    volumes:
+      - motion_java_data:/app/data
+      - motion_java_uploads:/app/uploads
+      - motion_java_outputs:/app/outputs
+    networks:
+      - homelab
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Optional resource guardrails (tune for your host; FFmpeg renders are the
+    # heavy phase). Uncomment to enable:
+    # mem_limit: 2g
+    # cpus: 2.0
+
+volumes:
+  motion_java_data:
+  motion_java_uploads:
+  motion_java_outputs:
+
+networks:
+  homelab:
+    external: true
