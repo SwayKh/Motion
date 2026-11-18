@@ -43,25 +43,28 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 fi
 MOTION_HOME="${MOTION_HOME:-/opt/motion}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.java.yml}"
-SERVICE="motion-java"
-VOLS=(motion_java_data motion_java_uploads motion_java_outputs)
+SERVICE="${SERVICE:-motion-java}"
+# Compose prefixes volume names with the project name (default: motion).
+PROJECT="${COMPOSE_PROJECT_NAME:-motion}"
+VOLS=("${PROJECT}_motion_java_data" "${PROJECT}_motion_java_uploads" "${PROJECT}_motion_java_outputs")
 
 mkdir -p "$OUT"
 chmod 700 "$OUT"
 
-stop_app()   { [[ $MODE == docker ]] && docker compose -f "$COMPOSE_FILE" stop "$SERVICE" >/dev/null; }
-start_app()  { [[ $MODE == docker ]] && docker compose -f "$COMPOSE_FILE" start "$SERVICE" >/dev/null; }
+stop_app()   { [[ $MODE == docker ]] && docker compose -f "$COMPOSE_FILE" --profile java stop "$SERVICE" >/dev/null; }
+start_app()  { [[ $MODE == docker ]] && docker compose -f "$COMPOSE_FILE" --profile java start "$SERVICE" >/dev/null; }
 
 echo "[backup] mode=$MODE output=$OUT online=$ONLINE"
+echo "[backup] volumes: ${VOLS[*]} (project=$PROJECT)"
 
 # 1. Database snapshot.
 if [[ $MODE == docker ]]; then
   if [[ $ONLINE -eq 0 ]]; then stop_app; fi
-  if docker compose -f "$COMPOSE_FILE" ps --status running -q "$SERVICE" | grep -q .; then
-    docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" \
+  if docker compose -f "$COMPOSE_FILE" --profile java ps --status running -q "$SERVICE" | grep -q .; then
+    docker compose -f "$COMPOSE_FILE" --profile java exec -T "$SERVICE" \
       java -jar /app/app.jar backup-db /app/data/backup.db
     docker cp "$SERVICE:/app/data/backup.db" "$OUT/app.db"
-    docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" rm -f /app/data/backup.db
+    docker compose -f "$COMPOSE_FILE" --profile java exec -T "$SERVICE" rm -f /app/data/backup.db
   else
     # App stopped: snapshot with a transient sqlite container against the data volume.
     docker run --rm -v "${VOLS[0]}:/data" alpine sh -c \

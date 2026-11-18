@@ -31,13 +31,16 @@ MODE="host"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then MODE="docker"; fi
 MOTION_HOME="${MOTION_HOME:-/opt/motion}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.java.yml}"
-SERVICE="motion-java"
-VOLS=(motion_java_data motion_java_uploads motion_java_outputs)
+SERVICE="${SERVICE:-motion-java}"
+# Compose prefixes volume names with the project name (default: motion).
+PROJECT="${COMPOSE_PROJECT_NAME:-motion}"
+VOLS=("${PROJECT}_motion_java_data" "${PROJECT}_motion_java_uploads" "${PROJECT}_motion_java_outputs")
 
 echo "[restore] mode=$MODE backup=$BACKUP_DIR"
+echo "[restore] target volumes: ${VOLS[*]} (project=$PROJECT)"
 
 if [[ $MODE == docker ]]; then
-  docker compose -f "$COMPOSE_FILE" stop "$SERVICE" >/dev/null 2>&1 || true
+  docker compose -f "$COMPOSE_FILE" --profile java stop "$SERVICE" >/dev/null 2>&1 || true
   [[ -f "$BACKUP_DIR/env" ]] && cp "$BACKUP_DIR/env" .env && chmod 600 .env
   docker run --rm \
     -v "${VOLS[0]}:/v/data" -v "${VOLS[1]}:/v/uploads" -v "${VOLS[2]}:/v/outputs" \
@@ -47,7 +50,7 @@ if [[ $MODE == docker ]]; then
       rm -f /v/data/app.db /v/data/app.db-wal /v/data/app.db-shm
       cp /in/app.db /v/data/app.db
       chown -R 10001:10001 /v'
-  docker compose -f "$COMPOSE_FILE" up -d "$SERVICE"
+  docker compose -f "$COMPOSE_FILE" --profile java up -d "$SERVICE"
   echo "[restore] waiting for health..."
   for _ in $(seq 1 60); do
     if docker exec "$SERVICE" curl -fsS http://localhost:8080/health >/dev/null 2>&1; then

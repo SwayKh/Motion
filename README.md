@@ -32,18 +32,22 @@ is the current implementation.
 
 ## Running locally (without Docker)
 
-Requires Java 21 and FFmpeg + FFprobe on your PATH.
+Requires Java 21 (`java -version` must print 21) and FFmpeg + FFprobe on your PATH.
 
 ```bash
-git clone <repository-url>
-cd Motion-Java/backend-java
+git clone <repository-url> motion
+cd motion/backend-java
 ./mvnw -DskipTests package
 cd ..
 java -jar backend-java/target/motion-java-0.1.0-PHASE4.jar
 ```
 
 Open http://localhost:8080, register an account and upload a video.
-Data is stored in `./data`, `./uploads` and `./outputs` (all git-ignored).
+The storage directories `./data`, `./uploads` and `./outputs` are created
+automatically on the first run (all git-ignored). Note: the app always starts
+with a fresh database — it does not migrate data from the old Go version, so if
+this checkout previously ran the Go app, move its old `data/`, `uploads/` and
+`outputs/` out of the way first.
 The application logs to the console; stop it with Ctrl+C.
 
 Without `MOTION_ENCRYPTION_KEY` set, media is stored unencrypted, which is fine
@@ -99,7 +103,9 @@ never commit it.
 
 More details: configuration reference and deployment/backup instructions live in
 [`backend-java/docs/`](backend-java/docs/) (`CONFIGURATION.md`, `DEPLOYMENT.md`,
-`SECURITY.md`, `TROUBLESHOOTING.md`).
+`SECURITY.md`, `TROUBLESHOOTING.md`). For deploying on a home server behind
+Caddy/Cloudflare (including private testing, backups and a cutover checklist),
+follow the step-by-step [HOME_SERVER_DEPLOYMENT_GUIDE.md](HOME_SERVER_DEPLOYMENT_GUIDE.md).
 
 ## Screenshots
 
